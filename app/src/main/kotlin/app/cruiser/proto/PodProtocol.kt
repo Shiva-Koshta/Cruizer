@@ -105,7 +105,8 @@ object PodProtocol {
         return 6
     }
 
-    private fun isKeep(code: Int) = code == Icons.KEEP_LEFT.code || code == Icons.KEEP_RIGHT.code
+    private fun isKeep(code: Int) =
+        code == Icons.KEEP_LANE_LEFT.code || code == Icons.KEEP_LANE_RIGHT.code
 
     /** Bottom line: ETA arrival time (fmt 0/1/2), time remaining (fmt 10/20/30) or total distance. */
     sealed interface Bottom {
@@ -168,17 +169,14 @@ object PodProtocol {
                 p[13] = 0 // mode 0 = time display
             }
             is Bottom.Remaining -> {
-                val h = b.seconds / 3600
+                // The verified layout has no "time remaining" format (wazetripper's
+                // fmt 10/20 doesn't fit the byte); we render remaining time as a
+                // clock-style h:mm with etaFormat 0. Hours cap at 63 (6 bits) —
+                // past that (2.6 days) the caller should fall back to distance.
+                val h = (b.seconds / 3600).coerceAtMost(63)
                 val mm = b.seconds % 3600 / 60
-                if (h < 24) {
-                    // fmt 10 = time remaining, within 24 h: [11] = hours, [12] = minutes.
-                    p[11] = ((0x0A shl 6) or (h and 0x3F)).toByte()
-                    p[12] = mm.toByte()
-                } else {
-                    // fmt 20 = a day or more: [11] = days (fmt 0x14), [12] = leftover hours.
-                    p[11] = ((0x14 shl 6) or (b.seconds / 86400 and 0x3F)).toByte()
-                    p[12] = (h % 24).toByte()
-                }
+                p[11] = (h and 0x3F).toByte()
+                p[12] = mm.toByte()
                 p[13] = 0
             }
             is Bottom.Total -> {

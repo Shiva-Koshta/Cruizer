@@ -96,8 +96,8 @@ class PodProtocolTest {
         assertEquals(5, PodProtocol.intensity(300, Icons.TURN_RIGHT.code))
         assertEquals(6, PodProtocol.intensity(900, Icons.TURN_RIGHT.code))
         // Keep maneuvers hold intensity 4 through the mid buckets (canonical behavior).
-        assertEquals(4, PodProtocol.intensity(55, Icons.KEEP_LEFT.code))
-        assertEquals(4, PodProtocol.intensity(85, Icons.KEEP_RIGHT.code))
+        assertEquals(4, PodProtocol.intensity(55, Icons.KEEP_LANE_LEFT.code))
+        assertEquals(4, PodProtocol.intensity(85, Icons.KEEP_LANE_RIGHT.code))
     }
 
     @Test
@@ -120,10 +120,10 @@ class PodProtocolTest {
         // Next arrow carries data while intensity < 5.
         assertEquals(0x09, f[7].toInt())
         val nextVal = PodProtocol.encodeDistance(220, false)
-        assertEquals(nextVal[0], (f[8].toInt() shl 8) or f[9].toInt())
+        assertEquals(nextVal[0], ((f[8].toInt() and 0xFF) shl 8) or (f[9].toInt() and 0xFF))
         assertEquals(nextVal[1], (f[10].toInt() ushr 4) and 0x0F)
-        // Bottom: fmt 10 (remaining < 24 h), hours = 2, minutes = 5, mode 0.
-        assertEquals(0x0A shl 6 or 2, f[11].toInt() and 0xFF)
+        // Bottom: time mode, etaFormat 0, remaining rendered h:mm = 2:05
+        assertEquals(2, f[11].toInt())
         assertEquals(5, f[12].toInt())
         assertEquals(0, f[13].toInt())
     }
@@ -139,12 +139,12 @@ class PodProtocolTest {
             bottom = PodProtocol.Bottom.Total(5000, false),
             night = false,
         )
-        assertEquals(0xFF, f[7].toInt())
-        assertEquals(0xFF, f[8].toInt())
-        assertEquals(0xFF, f[9].toInt())
-        // Bottom Total: value BE at [11-12], unit at [13].
+        assertEquals(0xFF, f[7].toInt() and 0xFF)
+        assertEquals(0xFF, f[8].toInt() and 0xFF)
+        assertEquals(0xFF, f[9].toInt() and 0xFF)
+        // Bottom Total: value BE at [11-12], unit at [13]. 5000 m -> hundreds (unit 2).
         assertEquals(50, (f[11].toInt() shl 8) or f[12].toInt())
-        assertEquals(1, f[13].toInt())
+        assertEquals(2, f[13].toInt())
     }
 
     @Test

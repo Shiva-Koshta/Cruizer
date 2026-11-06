@@ -147,7 +147,6 @@ class PodService : Service() {
                 awaitPin(false)
             }
         }.launchIn(scope)
-    }
 
         Session.currentTurn.onEach { t ->
             if (lastTurn == null && t != null) sentSplash = false

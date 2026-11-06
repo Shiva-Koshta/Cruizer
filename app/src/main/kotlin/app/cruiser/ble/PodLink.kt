@@ -17,6 +17,7 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
+import app.cruiser.proto.PodProtocol
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,9 +81,8 @@ class PodLink(private val context: Context) {
             // Try notifications (RE does) — if the Pod never notifies, the mirror
             // server path still delivers its replies.
             g.setCharacteristicNotification(c, true)
-            g.getDescriptor(c)?.let { d ->
-                d.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                g.writeDescriptor(d)
+            c.descriptors.firstOrNull()?.let { d ->
+                g.writeDescriptor(d, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
             }
             char = c
             _state.value = LinkState.CONNECTED
@@ -96,7 +96,8 @@ class PodLink(private val context: Context) {
         // Legacy signature covers API 31/32 when running on newer compile SDK.
         @Deprecated("deprecated in Java")
         override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
-            c.value?.let(onCommand)
+            val v = c.value ?: return
+            onCommand?.invoke(v)
         }
     }
 
