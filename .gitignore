@@ -1,0 +1,12 @@
+# proprietary material — never commit the APK or decompiled output
+*.apks
+*.apk
+analysis/raw/
+analysis/jadx-out/
+analysis/ghidra/
+
+# build junk
+app/build/
+.gradle/
+local.properties
+.idea/
