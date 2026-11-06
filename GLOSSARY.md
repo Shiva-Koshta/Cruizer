@@ -11,3 +11,7 @@ Decisions that crystallize live here. No implementation details.
 - **TBT feed** — turn-by-turn data (current step, remaining steps, distances, ETA). In the RE app it comes from a proprietary Google SDK over a Messenger; in our app it comes from our own OSM routing/notification parsing.
 - **Maneuver icon byte** — the frame's `mgj`-style enum value naming which big arrow the Pod draws.
 - **Bottom line** — the frame's `[11..13]` fields; either a time (ETA) or a distance.
+- **Turn source** — wherever Cruiser gets its turn-by-turn updates: today the notification-listener parser (`TurnSource`), later a possible OsmAnd/CoMaps fork.
+- **Frame playground** — debug-only screen that composes an arbitrary nav frame, shows its hex, and sends it live so the Pod's actual rendering can be verified against the icon table.
+- **Night-mode policy** — day/night/auto cycle chosen in settings; AUTO estimates sunrise/sunset from a coarse last-known location instead of tracking position.
+- **Fill-up log** — phase-2 manual fuel entries (price per litre, km/L) with GPX export of the period's trips.

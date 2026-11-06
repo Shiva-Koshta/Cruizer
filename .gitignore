@@ -4,6 +4,7 @@
 analysis/raw/
 analysis/jadx-out/
 analysis/ghidra/
+analysis/jadx.log
 
 # build junk
 app/build/
