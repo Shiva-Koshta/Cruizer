@@ -23,6 +23,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import app.cruiser.Session
 
@@ -31,6 +32,7 @@ import app.cruiser.Session
 @Composable
 fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
     val s by Session.settings.collectAsState()
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
 
     Column(
         modifier = modifier
@@ -106,7 +108,16 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
             if (notifs.isNotEmpty()) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Last nav notifications", style = MaterialTheme.typography.titleSmall)
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Last nav notifications", style = MaterialTheme.typography.titleSmall)
+                            OutlinedButton(onClick = {
+                                clipboard.setText(AnnotatedString(notifs.joinToString("\n")))
+                            }) { Text("Copy") }
+                        }
                         notifs.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
                 }

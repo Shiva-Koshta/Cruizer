@@ -1,6 +1,7 @@
 package app.cruiser
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -146,6 +147,9 @@ object Session {
     /** Debug raw-notification capture (Settings tab on debug builds), newest first. */
     val recentNotifs = MutableStateFlow<List<String>>(emptyList())
     fun captureNotif(line: String) {
+        if (!app.cruiser.BuildConfig.DEBUG) return
+        // Also into logcat so `adb logcat -d -s CruiserNav` pulls it without the UI.
+        Log.i("CruiserNav", line)
         recentNotifs.value = (listOf(line) + recentNotifs.value).take(15)
     }
 
