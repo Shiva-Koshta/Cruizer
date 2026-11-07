@@ -24,6 +24,8 @@ import app.cruiser.proto.Icons
 import app.cruiser.proto.PodProtocol
 import app.cruiser.proto.TurnUpdate
 import app.cruiser.ui.MainActivity
+import app.cruiser.trip.TripRecorder
+import app.cruiser.trip.TripStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -63,6 +65,7 @@ class PodService : Service() {
     private lateinit var link: PodLink
     private var tickJob: Job? = null
     private var telephonyCallback: TelephonyCallback? = null
+    private lateinit var recorder: TripRecorder
 
     var awaitingPin = false
         private set
@@ -78,14 +81,27 @@ class PodService : Service() {
         startAsForeground("Cruiser is starting…")
         Session.init(this)
         link = PodLink(this)
-        link.openServer()
+        if (bleReady()) link.openServer() // needs BLUETOOTH_CONNECT; skip silently otherwise
         link.onCommand = ::onPodCommand
         observe()
         restorePairedAddress()
+        recorder = TripRecorder(this)
+        recorder.startListening()
         refreshLocation()
         registerPhoneState()
         // UI PIN submissions -> Pod (PIN typed on the connection dialog).
         scope.launch { Session.pinInput.collect { link.send(PodProtocol.pinFrame(it)) } }
+        // Trips tab start/stop -> recorder (service consumes and clears).
+        scope.launch {
+            Session.tripCommand.collect { cmd ->
+                when (cmd) {
+                    null -> {}
+                    true -> recorder.startTrip(System.currentTimeMillis())
+                    false -> recorder.stopTrip()
+                }
+                Session.tripCommand.value = null
+            }
+        }
         tickJob = scope.launch {
             // The Pod only advertises for ~30 s after ignition-on, so reconnect
             // attempts keep pacing in the background.
@@ -93,7 +109,7 @@ class PodService : Service() {
             while (isActive) {
                 if (link.state.value != LinkState.CONNECTED) {
                     if (--reconnectCountdown <= 0) {
-                        link.scanOrConnect()
+                        link.scanOrConnect(bleReady())
                         reconnectCountdown = 7
                     }
                 } else reconnectCountdown = 0
@@ -103,6 +119,11 @@ class PodService : Service() {
             }
         }
     }
+
+    /** Preconditions for any BLE call — checked, never assumed. */
+    private fun bleReady(): Boolean =
+        hasPerm(Manifest.permission.BLUETOOTH_CONNECT) &&
+            hasPerm(Manifest.permission.BLUETOOTH_SCAN)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -115,7 +136,9 @@ class PodService : Service() {
     override fun onDestroy() {
         tickJob?.cancel()
         unregisterPhoneState()
-        link.disconnect()
+        recorder.stopTrip()
+        recorder.stopListening()
+        if (bleReady()) link.disconnect()
         link.closeServer()
         scope.cancel()
         super.onDestroy()
@@ -140,7 +163,7 @@ class PodService : Service() {
         Session.currentTurn.onEach { t ->
             if (lastTurn == null && t != null) sentSplash = false
             lastTurn = t
-            if (t != null && link.state.value == LinkState.DISCONNECTED) link.scanOrConnect()
+            if (t != null && link.state.value == LinkState.DISCONNECTED) link.scanOrConnect(bleReady())
         }.launchIn(scope)
     }
 
@@ -198,8 +221,8 @@ class PodService : Service() {
     fun forgetPod() {
         getSharedPreferences("pod", Context.MODE_PRIVATE).edit().clear().apply()
         link.deviceAddress.value = null
-        link.disconnect()
-        link.scanOrConnect()
+        if (bleReady()) link.disconnect()
+        link.scanOrConnect(bleReady())
     }
 
     private fun awaitPin(on: Boolean) {
@@ -381,6 +404,8 @@ class PodService : Service() {
                 LinkState.CONNECTED -> "Connected to the Tripper Pod"
                 LinkState.CONNECTING -> "Connecting to Tripper Pod…"
                 LinkState.SCANNING -> "Scanning for the Tripper Pod…"
+                LinkState.BT_OFF -> "Bluetooth is off — turn it on"
+                LinkState.NO_PERMISSIONS -> "Bluetooth permission required"
                 LinkState.DISCONNECTED ->
                     if (awaitingPin) "Enter the PIN shown on the Tripper Pod"
                     else "Tripper Pod disconnected — waiting for ignition"

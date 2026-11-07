@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-enum class LinkState { SCANNING, CONNECTING, CONNECTED, DISCONNECTED }
+enum class LinkState { SCANNING, CONNECTING, CONNECTED, DISCONNECTED, BT_OFF, NO_PERMISSIONS }
 
 /**
  * BLE transport for the Tripper Pod, mirroring the RE app's behavior:
@@ -112,10 +112,21 @@ class PodLink(private val context: Context) {
         }
     }
 
-    /** Remembered Pod: connect directly; otherwise scan for the Pod's service briefly. */
-    fun scanOrConnect() {
+    /**
+     * Remembered Pod: connect directly; otherwise scan for the Pod's service briefly.
+     * Bluetooth off / permissions missing surface as states, never throw.
+     */
+    fun scanOrConnect(blePerms: Boolean) {
+        if (!adapter.isEnabled) {
+            _state.value = LinkState.BT_OFF
+            return
+        }
+        if (!blePerms) {
+            _state.value = LinkState.NO_PERMISSIONS
+            return
+        }
         val remembered = deviceAddress.value
-        if (remembered != null) connect(remembered) else startScan()
+        if (remembered != null) connect(blePerms, remembered) else startScan()
     }
 
     private fun startScan() {
@@ -125,7 +136,7 @@ class PodLink(private val context: Context) {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 stopScan()
                 deviceAddress.value = result.device.address
-                connect(result.device.address)
+                connect(true, result.device.address)
             }
         }
         val settings = ScanSettings.Builder()
@@ -141,7 +152,11 @@ class PodLink(private val context: Context) {
         scanCallback = null
     }
 
-    fun connect(address: String) {
+    fun connect(blePerms: Boolean, address: String) {
+        if (!adapter.isEnabled || !blePerms) {
+            _state.value = if (!adapter.isEnabled) LinkState.BT_OFF else LinkState.NO_PERMISSIONS
+            return
+        }
         stopScan()
         _state.value = LinkState.CONNECTING
         closeAndReset()

@@ -121,6 +121,13 @@ object Session {
     /** UI -> service channel for the 6-digit PIN the user typed (manual DI). */
     val pinInput = MutableSharedFlow<String>(extraBufferCapacity = 4)
 
+    /**
+     * UI (Trips tab) -> service: start/stop the ride. StateFlow, not SharedFlow,
+     * so a command survives the cold start of the service; the service consumes
+     * it and clears back to null.
+     */
+    val tripCommand = MutableStateFlow<Boolean?>(null)
+
     private val _phoneCall = MutableStateFlow(PhoneCall.NONE)
     val phoneCall: StateFlow<PhoneCall> = _phoneCall
 
@@ -139,4 +146,23 @@ object Session {
     /** Coarse location cache for the AUTO night mode (sunrise/sunset). */
     @Volatile var lastLat: Double? = null
     @Volatile var lastLon: Double? = null
+
+    /** Live ride; null when no ride is active. */
+    data class TripState(val startedAt: Long, val distanceM: Int, val lastLoc: android.location.Location?)
+
+    private val _trip = MutableStateFlow<TripState?>(null)
+    val trip: StateFlow<TripState?> = _trip
+
+    fun startTrip(startedAt: Long) {
+        _trip.value = TripState(startedAt, 0, null)
+    }
+
+    fun updateTrip(distanceM: Int, lastLoc: android.location.Location?) {
+        _trip.value = _trip.value?.copy(distanceM = distanceM, lastLoc = lastLoc ?: _trip.value?.lastLoc)
+    }
+
+    fun endTrip() {
+        _trip.value = null
+    }
+
 }
