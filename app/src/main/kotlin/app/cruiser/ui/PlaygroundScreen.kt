@@ -2,6 +2,8 @@ package app.cruiser.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +37,7 @@ import app.cruiser.proto.TurnUpdate
  * verify what it actually draws (roundabout exit icons especially — they come
  * from hardware observation marked "Likely" and were never sent by the RE app).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlaygroundScreen(onBack: () -> Unit) {
     val s by Session.settings.collectAsState()
@@ -53,21 +56,23 @@ fun PlaygroundScreen(onBack: () -> Unit) {
         Text("Frame playground", style = MaterialTheme.typography.headlineSmall)
 
         Text("Maneuver", style = MaterialTheme.typography.titleSmall)
-        TurnKind.entries.forEach { k ->
-            FilterChip(
-                selected = kind == k,
-                onClick = { kind = k },
-                label = { Text(k.name.lowercase()) },
-            )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TurnKind.entries.forEach { k ->
+                FilterChip(
+                    selected = kind == k,
+                    onClick = { kind = k },
+                    label = { Text(k.name.lowercase()) },
+                )
+            }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(10, 30, 55, 100, 300, 1000, 5000).forEach { d ->
                 FilterChip(selected = distance == d, onClick = { distance = d }, label = { Text("$d") })
             }
         }
         if (kind == TurnKind.ROUNDABOUT) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (1..6).forEach { e ->
                     FilterChip(selected = exit == e, onClick = { exit = e }, label = { Text("exit $e") })
                 }

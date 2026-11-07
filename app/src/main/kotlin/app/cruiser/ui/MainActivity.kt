@@ -6,20 +6,28 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -36,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.cruiser.Session
 import app.cruiser.ble.LinkState
@@ -52,13 +61,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Settings persist from here, not from the Pod service, so theme changes
+        // survive even when the rider never connects.
+        Session.init(applicationContext)
+        enableEdgeToEdge()
         setContent {
             val s by Session.settings.collectAsState()
-            // The app's own theme follows the night-mode setting the rider picked.
-            val dark = when (s.nightMode) {
-                Session.NightMode.DAY -> false
-                Session.NightMode.NIGHT -> true
-                Session.NightMode.AUTO -> isSystemInDarkTheme()
+            // The app's own theme follows the rider's light/dark/system choice;
+            // the night-mode setting is about the Pod's screen, not this app.
+            val dark = when (s.themeMode) {
+                Session.ThemeMode.LIGHT -> false
+                Session.ThemeMode.DARK -> true
+                Session.ThemeMode.SYSTEM -> isSystemInDarkTheme()
             }
             CruiserTheme(dark) {
                 val p by page.collectAsState()
@@ -75,17 +89,18 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MainScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
     val state by Session.linkState.collectAsState()
     val turn by Session.currentTurn.collectAsState()
     val s by Session.settings.collectAsState()
     val awaitingPin by Session.awaitingPin.collectAsState()
-    var pinDialogOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     Column(
         modifier = modifier
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -103,6 +118,18 @@ private fun MainScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) 
                     },
                     style = MaterialTheme.typography.titleMedium,
                 )
+                if (state == LinkState.CONNECTING || state == LinkState.SCANNING) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CircularProgressIndicator()
+                        Text(
+                            when (state) {
+                                LinkState.CONNECTING -> "Handshaking with the Pod"
+                                else -> "The Pod advertises for ~30 s after ignition-on"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
                 turn?.let { t ->
                     Text(
                         "Last instruction: ${t.kind} ${t.distanceM ?: "-"} m" +
@@ -112,7 +139,10 @@ private fun MainScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) 
                 }
                 if (state == LinkState.DISCONNECTED || state == LinkState.SCANNING) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = context::podStart) { Text("Connect") }
+                        Button(
+                            onClick = context::podStart,
+                            enabled = state == LinkState.DISCONNECTED, // already scanning the Pod
+                        ) { Text("Connect") }
                         OutlinedButton(onClick = context::openListenerSettings) { Text("Nav apps") }
                     }
                 } else {
@@ -131,32 +161,50 @@ private fun MainScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) 
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Night mode", style = MaterialTheme.typography.titleSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Session.NightMode.entries.forEach { m ->
+                Text("Theme", style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val themes = listOf(
+                        Session.ThemeMode.SYSTEM to "system",
+                        Session.ThemeMode.LIGHT to "light",
+                        Session.ThemeMode.DARK to "dark",
+                    )
+                    themes.forEach { (m, label) ->
+                        FilterChip(
+                            selected = s.themeMode == m,
+                            onClick = { Session.updateSettings { it.copy(themeMode = m) } },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+
+                Text("Pod night mode", style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val modes = listOf(
+                        Session.NightMode.DAY to "day",
+                        Session.NightMode.NIGHT to "night",
+                        Session.NightMode.AUTO to "auto",
+                    )
+                    modes.forEach { (m, label) ->
                         FilterChip(
                             selected = s.nightMode == m,
                             onClick = { Session.updateSettings { it.copy(nightMode = m) } },
-                            label = { Text(m.name.lowercase()) },
+                            label = { Text(label) },
                         )
                     }
                 }
 
                 Text("Bottom line", style = MaterialTheme.typography.titleSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Session.BottomMode.entries.forEach { m ->
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val bottoms = listOf(
+                        Session.BottomMode.TOTAL to "distance",
+                        Session.BottomMode.REMAINING to "time left",
+                        Session.BottomMode.ARRIVAL to "arrival",
+                    )
+                    bottoms.forEach { (m, label) ->
                         FilterChip(
                             selected = s.bottomMode == m,
                             onClick = { Session.updateSettings { it.copy(bottomMode = m) } },
-                            label = {
-                                Text(
-                                    when (m) {
-                                        Session.BottomMode.TOTAL -> "distance"
-                                        Session.BottomMode.REMAINING -> "time left"
-                                        Session.BottomMode.ARRIVAL -> "arrival"
-                                    }
-                                )
-                            },
+                            label = { Text(label) },
                         )
                     }
                 }
@@ -211,6 +259,7 @@ private fun PinDialog() {
                     onValueChange = { v -> pin = v.filter { it.isDigit() }.take(6) },
                     label = { Text("PIN") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 )
             }
         },

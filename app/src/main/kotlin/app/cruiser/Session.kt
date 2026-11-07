@@ -1,27 +1,85 @@
 package app.cruiser
 
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import app.cruiser.ble.LinkState
 import app.cruiser.proto.TurnUpdate
+import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+
+/** Process-wide DataStore shared by the UI and the Pod service. */
+internal val Context.cruiserStore by preferencesDataStore("cruiser")
 
 /**
  * Process-wide shared state between the turn source, the BLE service and the UI.
- * Plain flows, no DI framework.
+ * Plain flows, no DI framework. Call [init] once when the process starts (either
+ * entry point is fine); after that every setting change persists immediately —
+ * not only while the Pod service happens to be running.
  */
 object Session {
+
+    private const val KEY_NIGHT = "night_mode"
+    private const val KEY_BOTTOM = "bottom_mode"
+    private const val KEY_THEME = "theme_mode"
+    private const val KEY_RADAR = "radar_enabled"
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @Volatile private var store: DataStore<Preferences>? = null
+    @Volatile private var initialized = false
+
+    /** Load stored settings once and keep persisting every change from now on. */
+    fun init(context: Context) {
+        if (initialized) return
+        synchronized(this) {
+            if (initialized) return
+            store = context.applicationContext.cruiserStore
+            initialized = true
+            scope.launch {
+                store?.data?.first()?.let { p ->
+                    _settings.value = _settings.value.copy(
+                        nightMode = NightMode.entries
+                            .getOrElse(p[intPreferencesKey(KEY_NIGHT)] ?: 2) { NightMode.AUTO },
+                        bottomMode = BottomMode.entries
+                            .getOrElse(p[intPreferencesKey(KEY_BOTTOM)] ?: 2) { BottomMode.ARRIVAL },
+                        themeMode = ThemeMode.entries
+                            .getOrElse(p[intPreferencesKey(KEY_THEME)] ?: 0) { ThemeMode.SYSTEM },
+                        radarEnabled = p[booleanPreferencesKey(KEY_RADAR)] ?: true,
+                        twelveHourClock = p[booleanPreferencesKey("clock_12h")] ?: false,
+                        imperial = p[booleanPreferencesKey("imperial")]
+                            ?: Locale.getDefault().country in setOf("US", "GB", "LR", "MM"),
+                    )
+                }
+            }
+        }
+    }
 
     enum class NightMode { DAY, NIGHT, AUTO }
 
     /** What the Pod's bottom line shows while navigating. */
     enum class BottomMode { TOTAL, REMAINING, ARRIVAL }
 
+    /** The app's own theme; independent of the night-mode setting. */
+    enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
     enum class PhoneCall { NONE, INCOMING, ACTIVE }
 
     data class Settings(
         val nightMode: NightMode = NightMode.AUTO,
         val bottomMode: BottomMode = BottomMode.ARRIVAL,
+        val themeMode: ThemeMode = ThemeMode.SYSTEM,
         val radarEnabled: Boolean = true,
         val twelveHourClock: Boolean = false,
         /** imperial feet/miles; default metric (Indian standard units) */
@@ -32,7 +90,18 @@ object Session {
     val settings: StateFlow<Settings> = _settings
 
     fun updateSettings(f: (Settings) -> Settings) {
-        _settings.value = f(_settings.value)
+        val next = f(_settings.value)
+        _settings.value = next
+        scope.launch {
+            store?.edit {
+                it[intPreferencesKey(KEY_NIGHT)] = next.nightMode.ordinal
+                it[intPreferencesKey(KEY_BOTTOM)] = next.bottomMode.ordinal
+                it[intPreferencesKey(KEY_THEME)] = next.themeMode.ordinal
+                it[booleanPreferencesKey(KEY_RADAR)] = next.radarEnabled
+                it[booleanPreferencesKey("clock_12h")] = next.twelveHourClock
+                it[booleanPreferencesKey("imperial")] = next.imperial
+            }
+        }
     }
 
     /** Latest parsed turn from any nav app; null when no active route. */

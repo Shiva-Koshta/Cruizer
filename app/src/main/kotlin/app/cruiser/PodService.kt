@@ -18,10 +18,6 @@ import android.os.IBinder
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
 import androidx.core.app.NotificationCompat
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import app.cruiser.ble.LinkState
 import app.cruiser.ble.PodLink
 import app.cruiser.proto.Icons
@@ -34,14 +30,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-
-private val Context.cruiserStore by preferencesDataStore("cruiser")
 
 /**
  * Foreground service owning the BLE link. A 1 Hz loop renders [Session] state into
@@ -58,9 +50,6 @@ class PodService : Service() {
         private const val NOTIF_ID = 42
         private const val KEY_MAC = "pod_mac"
         private const val KEY_PAIRED = "pod_paired"
-        private const val KEY_NIGHT = "night_mode"
-        private const val KEY_BOTTOM = "bottom_mode"
-        private const val KEY_RADAR = "radar_enabled"
         private const val CONNECT_PAUSE_MS = 1000L
         private const val RESUME_PREAMBLE_MS = 200L
     }
@@ -87,12 +76,12 @@ class PodService : Service() {
     override fun onCreate() {
         super.onCreate()
         startAsForeground("Cruiser is starting…")
+        Session.init(this)
         link = PodLink(this)
         link.openServer()
         link.onCommand = ::onPodCommand
         observe()
-        watchSettings()
-        restoreSettings()
+        restorePairedAddress()
         refreshLocation()
         registerPhoneState()
         // UI PIN submissions -> Pod (PIN typed on the connection dialog).
@@ -349,44 +338,13 @@ class PodService : Service() {
     private fun hasPerm(p: String): Boolean =
         checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
 
-    // ------------------------------------------------------------ persistence
+    // ------------------------------------------------------------ pairing memory
 
-    private fun restoreSettings() {
-        scope.launch {
-            val prefs = applicationContext.cruiserStore.data.firstOrNull() ?: return@launch
-            Session.updateSettings {
-                it.copy(
-                    nightMode = Session.NightMode.entries
-                        .getOrElse(prefs[intPreferencesKey(KEY_NIGHT)] ?: 2) { Session.NightMode.AUTO },
-                    bottomMode = Session.BottomMode.entries
-                        .getOrElse(prefs[intPreferencesKey(KEY_BOTTOM)] ?: 2) { Session.BottomMode.ARRIVAL },
-                    radarEnabled = prefs[booleanPreferencesKey(KEY_RADAR)] ?: true,
-                    twelveHourClock = prefs[booleanPreferencesKey("clock_12h")] ?: false,
-                    imperial = prefs[booleanPreferencesKey("imperial")]
-                        ?: java.util.Locale.getDefault().country in setOf("US", "GB", "LR", "MM"),
-                )
-            }
-            // mirror pairing memory into the link
-            val mac = applicationContext.getSharedPreferences("pod", Context.MODE_PRIVATE)
-                .getString(KEY_MAC, null)
-            if (mac != null) link.deviceAddress.tryEmit(mac)
-            refreshLocation()
-        }
-    }
-
-    /** Persist settings whenever they change. */
-    private fun watchSettings() {
-        scope.launch {
-            Session.settings.collectLatest { s ->
-                applicationContext.cruiserStore.edit {
-                    it[intPreferencesKey(KEY_NIGHT)] = s.nightMode.ordinal
-                    it[intPreferencesKey(KEY_BOTTOM)] = s.bottomMode.ordinal
-                    it[booleanPreferencesKey(KEY_RADAR)] = s.radarEnabled
-                    it[booleanPreferencesKey("clock_12h")] = s.twelveHourClock
-                    it[booleanPreferencesKey("imperial")] = s.imperial
-                }
-            }
-        }
+    /** Mirror the remembered Pod MAC into the link so resume skips the scan. */
+    private fun restorePairedAddress() {
+        val mac = applicationContext.getSharedPreferences("pod", Context.MODE_PRIVATE)
+            .getString(KEY_MAC, null)
+        if (mac != null) link.deviceAddress.tryEmit(mac)
     }
 
     // ------------------------------------------------------------- notification
