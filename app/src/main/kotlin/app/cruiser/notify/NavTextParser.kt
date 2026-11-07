@@ -132,9 +132,14 @@ object NavTextParser {
         PHRASES.firstOrNull { (_, phrases) -> phrases.any(lower::contains) }?.first
             ?: TurnKind.STRAIGHT
 
-    private fun toMeters(m: MatchResult): Int? {
-        val v = m.groupValues[1].replace(',', '.').toDoubleOrNull() ?: return null
-        return when (m.groupValues[2].lowercase()) {
+    private fun toMeters(m: MatchResult): Int? = toMeters(m.groupValues[1], m.groupValues[2])
+
+    /** Public hook for the structured sources (CoMaps provider sends formatted "1.2 km" strings). */
+    fun metersOf(text: String): Int? = DISTANCE.find(text)?.let(::toMeters)
+
+    private fun toMeters(value: String, unit: String): Int? {
+        val v = value.replace(',', '.').toDoubleOrNull() ?: return null
+        return when (unit.lowercase()) {
             "m" -> v.roundToInt()
             "km" -> (v * 1000).roundToInt()
             "ft", "feet" -> (v * 0.3048).roundToInt()

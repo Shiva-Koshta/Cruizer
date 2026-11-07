@@ -143,6 +143,12 @@ object Session {
         _radar.value = meters
     }
 
+    /** Debug raw-notification capture (Settings tab on debug builds), newest first. */
+    val recentNotifs = MutableStateFlow<List<String>>(emptyList())
+    fun captureNotif(line: String) {
+        recentNotifs.value = (listOf(line) + recentNotifs.value).take(15)
+    }
+
     /** Coarse location cache for the AUTO night mode (sunrise/sunset). */
     @Volatile var lastLat: Double? = null
     @Volatile var lastLon: Double? = null

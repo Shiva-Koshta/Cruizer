@@ -20,6 +20,7 @@ import android.telephony.TelephonyManager
 import androidx.core.app.NotificationCompat
 import app.cruiser.ble.LinkState
 import app.cruiser.ble.PodLink
+import app.cruiser.notify.ComapsSource
 import app.cruiser.proto.Icons
 import app.cruiser.proto.PodProtocol
 import app.cruiser.proto.TurnUpdate
@@ -86,9 +87,11 @@ class PodService : Service() {
         observe()
         restorePairedAddress()
         recorder = TripRecorder(this)
-        recorder.startListening()
+        // GPS listening is trip-scoped: holding a 1 Hz session the whole time the
+        // service runs starves nav apps (notably CoMaps' faster fixer) of it.
         refreshLocation()
         registerPhoneState()
+        ComapsSource.start(this) // structured turn data from CoMaps, if installed+granted
         // UI PIN submissions -> Pod (PIN typed on the connection dialog).
         scope.launch { Session.pinInput.collect { link.send(PodProtocol.pinFrame(it)) } }
         // Trips tab start/stop -> recorder (service consumes and clears).
@@ -96,8 +99,14 @@ class PodService : Service() {
             Session.tripCommand.collect { cmd ->
                 when (cmd) {
                     null -> {}
-                    true -> recorder.startTrip(System.currentTimeMillis())
-                    false -> recorder.stopTrip()
+                    true -> {
+                        recorder.startListening()
+                        recorder.startTrip(System.currentTimeMillis())
+                    }
+                    false -> {
+                        recorder.stopTrip()
+                        recorder.stopListening()
+                    }
                 }
                 Session.tripCommand.value = null
             }
@@ -140,6 +149,7 @@ class PodService : Service() {
         recorder.stopListening()
         if (bleReady()) link.disconnect()
         link.closeServer()
+        ComapsSource.stop(this)
         scope.cancel()
         super.onDestroy()
     }

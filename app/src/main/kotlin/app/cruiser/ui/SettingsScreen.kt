@@ -102,6 +102,15 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
 
         if (app.cruiser.BuildConfig.DEBUG) {
             OutlinedButton(onClick = onPlayground) { Text("Frame playground") }
+            val notifs by app.cruiser.Session.recentNotifs.collectAsState()
+            if (notifs.isNotEmpty()) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Last nav notifications", style = MaterialTheme.typography.titleSmall)
+                        notifs.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+            }
         }
     }
 }

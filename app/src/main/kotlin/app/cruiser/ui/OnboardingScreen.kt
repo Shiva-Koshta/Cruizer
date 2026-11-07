@@ -54,7 +54,12 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
 
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { MainActivity.gate.tryEmit(1) }
+    ) {
+        // One of the requests was CoMaps' custom permission: hook its observer
+        // right away (harmless no-op if the grant didn't land).
+        app.cruiser.notify.ComapsSource.start(context)
+        MainActivity.gate.tryEmit(1)
+    }
     val btLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { MainActivity.gate.tryEmit(1) }
@@ -124,6 +129,18 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
         ) {
             OutlinedButton(enabled = !listener, onClick = context::openListenerSettings) {
                 Text(if (listener) "Granted" else "Open settings")
+            }
+        }
+
+        val comapsPerms = app.cruiser.notify.ComapsSource.permissions(context)
+        if (comapsPerms.isNotEmpty()) {
+            StepCard(
+                title = "CoMaps turn data (structured, no text parsing)",
+                granted = false,
+            ) {
+                Button(
+                    onClick = { permLauncher.launch(comapsPerms.toTypedArray()) },
+                ) { Text("Grant") }
             }
         }
     }
