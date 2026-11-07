@@ -52,6 +52,7 @@ object ComapsSource {
         appContext = app
         val flavors = installed(app).filter { granted(app, it) }
         if (flavors.isEmpty()) return
+        var ok = 0
         flavors.forEach { pkg ->
             try {
                 app.contentResolver.registerContentObserver(
@@ -59,9 +60,11 @@ object ComapsSource {
                     false,
                     observer,
                 )
+                ok++
             } catch (_: Exception) {
             }
         }
+        if (ok == 0) return // nothing registered — allow a later start() to retry
         registered = true
         observer.query(app) // surface a session already in progress
     }

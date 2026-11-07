@@ -82,7 +82,8 @@ class PodService : Service() {
         startAsForeground("Cruiser is starting…")
         Session.init(this)
         link = PodLink(this)
-        if (bleReady()) link.openServer() // needs BLUETOOTH_CONNECT; skip silently otherwise
+        // The GATT server only needs CONNECT (SCAN is for discovering new Pods).
+        if (hasPerm(Manifest.permission.BLUETOOTH_CONNECT)) link.openServer()
         link.onCommand = ::onPodCommand
         observe()
         restorePairedAddress()

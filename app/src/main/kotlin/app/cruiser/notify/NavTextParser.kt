@@ -36,9 +36,12 @@ object NavTextParser {
     private val ARRIVED =
         Regex("""you (?:have )?(?:just )?arrived|reached your (?:destination|endpoint)""", RegexOption.IGNORE_CASE)
 
-    /** Google Maps bottom line: "24 min · 31 km" (also "20 mins · 5.2 km"). */
+    /** Google Maps bottom line: "24 min · 31 km" (also "20 mins · 5.2 mi", "24 min · 900 ft"). */
     private val MAPS_BOTTOM =
-        Regex("""(\d+)\s*min[s]?\s*·\s*(\d+(?:[.,]\d+)?)\s*(km|mi)""", RegexOption.IGNORE_CASE)
+        Regex(
+            """(\d+)\s*min[s]?\s*·\s*(\d+(?:[.,]\d+)?)\s*(m\b|km\b|ft\b|feet\b|mi\b|miles?\b|yd\b)""",
+            RegexOption.IGNORE_CASE,
+        )
 
     /** Standalone Google Maps bottom line without distance: "24 min". */
     private val MINUTES_ONLY =
@@ -119,14 +122,8 @@ object NavTextParser {
         )
     }
 
-    private fun bottomRemaining(m: MatchResult): Int? {
-        val v = m.groupValues[2].replace(',', '.').toDoubleOrNull() ?: return null
-        return when (m.groupValues[3].lowercase()) {
-            "km" -> (v * 1000).roundToInt()
-            "mi" -> (v * 1609.34).roundToInt()
-            else -> null
-        }
-    }
+    private fun bottomRemaining(m: MatchResult): Int? =
+        toMeters(m.groupValues[2], m.groupValues[3])
 
     private fun kindOf(lower: String): TurnKind =
         PHRASES.firstOrNull { (_, phrases) -> phrases.any(lower::contains) }?.first

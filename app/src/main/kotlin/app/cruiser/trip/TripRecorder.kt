@@ -8,6 +8,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import app.cruiser.Session
+import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 /**
@@ -61,20 +62,26 @@ class TripRecorder(private val context: Context) : LocationListener {
 
     fun stopTrip() {
         val trip = Session.trip.value ?: return
-        gpx?.close()
+        val file = gpx
         gpx = null
-        TripStore.save(
-            context,
-            Trip(
-                id = trip.startedAt,
-                endedAt = System.currentTimeMillis(),
-                distanceM = trip.distanceM,
-            ),
-        )
-        Session.endTrip()
+        // Slow-disk writes (GPX footer + DB save) off the main thread.
+        persist.execute {
+            file?.close()
+            TripStore.save(
+                context,
+                Trip(
+                    id = trip.startedAt,
+                    endedAt = System.currentTimeMillis(),
+                    distanceM = trip.distanceM,
+                ),
+            )
+            Session.endTrip()
+        }
     }
 
     private fun lm(): LocationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+
+    private val persist = Executors.newSingleThreadExecutor { r -> Thread(r, "trip-gpx").apply { isDaemon = true } }
 
     private fun hasPerm(p: String) =
         context.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED

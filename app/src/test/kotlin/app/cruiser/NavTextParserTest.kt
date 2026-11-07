@@ -59,6 +59,14 @@ class NavTextParserTest {
     }
 
     @Test
+    fun mapsBottomLineFeetAndMeters() {
+        val p = NavTextParser.parse("Continue straight\n24 min · 1500 ft") as Parsed.Turn
+        assertEquals(457, p.update.routeRemainingM) // 1500 * 0.3048
+        val q = NavTextParser.parse("Continue straight\n24 min · 800 m") as Parsed.Turn
+        assertEquals(800, q.update.routeRemainingM)
+    }
+
+    @Test
     fun mapsStandaloneMinutes() {
         val p = NavTextParser.parse("Continue straight\n24 min") as Parsed.Turn
         assertEquals(24 * 60, p.update.remainingSeconds)
