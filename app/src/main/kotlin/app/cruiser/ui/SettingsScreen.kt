@@ -90,61 +90,90 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
 
         item {
             CruiserGlassCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(2.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Theme", style = MaterialTheme.typography.titleSmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        THEME_OPTIONS.forEach { (m, label) ->
-                            FilterChip(
-                                selected = s.themeMode == m,
-                                onClick = { Session.updateSettings { it.copy(themeMode = m) } },
-                                label = { Text(label) },
-                            )
-                        }
-                    }
-
-                    Text("Pod night mode", style = MaterialTheme.typography.titleSmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NIGHT_OPTIONS.forEach { (m, label) ->
-                            FilterChip(
-                                selected = s.nightMode == m,
-                                onClick = { Session.updateSettings { it.copy(nightMode = m) } },
-                                label = { Text(label) },
-                            )
-                        }
-                    }
-
-                    Text("Bottom line", style = MaterialTheme.typography.titleSmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        BOTTOM_OPTIONS.forEach { (m, label) ->
-                            FilterChip(
-                                selected = s.bottomMode == m,
-                                onClick = { Session.updateSettings { it.copy(bottomMode = m) } },
-                                label = { Text(label) },
-                            )
-                        }
-                    }
-
-                    if (s.bottomMode == Session.BottomMode.CYCLE) {
-                        Text("Cycle interval", style = MaterialTheme.typography.bodySmall)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            CYCLE_OPTIONS.forEach { (sec, label) ->
+                Column(
+                    modifier = Modifier.padding(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Theme", style = MaterialTheme.typography.titleSmall)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            THEME_OPTIONS.forEach { (m, label) ->
                                 FilterChip(
-                                    selected = s.cycleIntervalSeconds == sec,
-                                    onClick = { Session.updateSettings { it.copy(cycleIntervalSeconds = sec) } },
+                                    selected = s.themeMode == m,
+                                    onClick = { Session.updateSettings { it.copy(themeMode = m) } },
                                     label = { Text(label) },
                                 )
                             }
                         }
                     }
 
-                    SettingSwitch("12-hour clock", s.twelveHourClock) { v ->
-                        Session.updateSettings { it.copy(twelveHourClock = v) }
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Pod night mode", style = MaterialTheme.typography.titleSmall)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            NIGHT_OPTIONS.forEach { (m, label) ->
+                                FilterChip(
+                                    selected = s.nightMode == m,
+                                    onClick = { Session.updateSettings { it.copy(nightMode = m) } },
+                                    label = { Text(label) },
+                                )
+                            }
+                        }
                     }
-                    SettingSwitch("Imperial units", s.imperial) { v ->
-                        Session.updateSettings { it.copy(imperial = v) }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Bottom line", style = MaterialTheme.typography.titleSmall)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            BOTTOM_OPTIONS.forEach { (m, label) ->
+                                FilterChip(
+                                    selected = s.bottomMode == m,
+                                    onClick = { Session.updateSettings { it.copy(bottomMode = m) } },
+                                    label = { Text(label) },
+                                )
+                            }
+                        }
                     }
-                    SettingSwitch("Liquid Glass & Specular Glare", s.liquidGlass) { v ->
-                        Session.updateSettings { it.copy(liquidGlass = v) }
+
+                    if (s.bottomMode == Session.BottomMode.CYCLE) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Cycle interval", style = MaterialTheme.typography.bodySmall)
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                CYCLE_OPTIONS.forEach { (sec, label) ->
+                                    FilterChip(
+                                        selected = s.cycleIntervalSeconds == sec,
+                                        onClick = { Session.updateSettings { it.copy(cycleIntervalSeconds = sec) } },
+                                        label = { Text(label) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    androidx.compose.material3.HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SettingSwitch("12-hour clock", s.twelveHourClock) { v ->
+                            Session.updateSettings { it.copy(twelveHourClock = v) }
+                        }
+                        SettingSwitch("Imperial units", s.imperial) { v ->
+                            Session.updateSettings { it.copy(imperial = v) }
+                        }
+                        SettingSwitch("Liquid Glass & Specular Glare", s.liquidGlass) { v ->
+                            Session.updateSettings { it.copy(liquidGlass = v) }
+                        }
                     }
                 }
             }
@@ -177,12 +206,22 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text("Last nav notifications", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    "Last nav notifications",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                                )
                                 OutlinedButton(onClick = {
                                     clipboard.setText(AnnotatedString(notifs.joinToString("\n")))
                                 }) { Text("Copy") }
                             }
-                            notifs.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                            notifs.forEach {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -206,11 +245,19 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
 @Composable
 private fun SettingSwitch(label: String, value: Boolean, onSet: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 16.dp),
+        )
         Switch(checked = value, onCheckedChange = onSet)
     }
 }
