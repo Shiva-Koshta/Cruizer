@@ -17,8 +17,10 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Call overlay (optional at runtime: without it the overlay stays off). -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <!-- CoMaps publishes live turn data under its own custom permission. -->
+    <!-- CoMaps publishes live turn data under each flavour's custom runtime permission. -->
     <uses-permission android:name="app.comaps.permission.READ_NAVIGATION_DATA" />
+    <uses-permission android:name="app.comaps.google.permission.READ_NAVIGATION_DATA" />
+    <uses-permission android:name="app.comaps.fdroid.permission.READ_NAVIGATION_DATA" />
 
     <!-- Android 11+ package visibility: resolve and query CoMaps' NavigationContentProvider -->
     <queries>

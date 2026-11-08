@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -95,6 +96,23 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                 }
                 SettingSwitch("Imperial units", s.imperial) { v ->
                     Session.updateSettings { it.copy(imperial = v) }
+                }
+            }
+        }
+
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val comapsPerms = app.cruiser.notify.ComapsSource.permissions(context)
+        if (comapsPerms.isNotEmpty()) {
+            val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
+            ) { app.cruiser.notify.ComapsSource.start(context) }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("CoMaps integration", style = MaterialTheme.typography.titleSmall)
+                    Text("Grant CoMaps data permission to get exact turn arrows instead of text parsing.", style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = { launcher.launch(comapsPerms.toTypedArray()) }) {
+                        Text("Grant permission")
+                    }
                 }
             }
         }

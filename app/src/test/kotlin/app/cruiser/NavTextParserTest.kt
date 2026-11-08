@@ -122,4 +122,26 @@ class NavTextParserTest {
         assertEquals(1200, NavTextParser.metersOf("1.2\u00A0km"))
         assertEquals(500, NavTextParser.metersOf("500\u202Fm"))
     }
+
+    @Test
+    fun unknownDirectionWhenNoManeuverKeyword() {
+        val p = NavTextParser.parse("Main Street in 400 m") as Parsed.Turn
+        assertEquals(TurnKind.UNKNOWN, p.update.kind)
+        assertEquals(400, p.update.distanceM)
+    }
+
+    @Test
+    fun googleMapsPhrases() {
+        val right = NavTextParser.parse("Right onto Main St in 300 m") as Parsed.Turn
+        assertEquals(TurnKind.RIGHT, right.update.kind)
+        assertEquals(300, right.update.distanceM)
+
+        val left = NavTextParser.parse("Left onto 4th Ave in 150 m") as Parsed.Turn
+        assertEquals(TurnKind.LEFT, left.update.kind)
+        assertEquals(150, left.update.distanceM)
+
+        val exit = NavTextParser.parse("Take exit 14B toward Airport in 800 m") as Parsed.Turn
+        assertEquals(TurnKind.OFF_RAMP_RIGHT, exit.update.kind)
+        assertEquals(800, exit.update.distanceM)
+    }
 }

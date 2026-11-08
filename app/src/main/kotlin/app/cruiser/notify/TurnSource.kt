@@ -64,6 +64,14 @@ class TurnSource : NotificationListenerService() {
 
     private fun tryParse(sbn: StatusBarNotification) {
         if (!isNavSource(sbn)) return
+        // CoMaps publishes structured turn data via ContentProvider (ComapsSource);
+        // ignore its notification so coarse text parsing cannot clobber it.
+        if (sbn.packageName.startsWith("app.comaps") &&
+            ComapsSource.installed(this).any { ComapsSource.granted(this, it) }
+        ) {
+            Session.navActive.value = true
+            return
+        }
         // Any ongoing nav notification means a route is live, even if its text
         // is still idle ("Guiding to…", "Starting navigation…").
         Session.navActive.value = true

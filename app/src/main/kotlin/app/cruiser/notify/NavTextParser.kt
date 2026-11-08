@@ -62,12 +62,12 @@ object NavTextParser {
         TurnKind.FORK_LEFT to listOf("fork left", "left fork"),
         TurnKind.FORK_RIGHT to listOf("fork right", "right fork"),
         TurnKind.OFF_RAMP_LEFT to listOf("exit left", "left exit", "ramp on the left"),
-        TurnKind.OFF_RAMP_RIGHT to listOf("exit right", "right exit", "ramp on the right"),
+        TurnKind.OFF_RAMP_RIGHT to listOf("exit right", "right exit", "ramp on the right", "take exit", "take the exit"),
         TurnKind.ON_RAMP to listOf("on-ramp", "onramp"),
         TurnKind.FERRY to listOf("ferry"),
         TurnKind.DESTINATION to listOf("arrive", "destination"),
-        TurnKind.LEFT to listOf("turn left", "left turn"),
-        TurnKind.RIGHT to listOf("turn right", "right turn"),
+        TurnKind.LEFT to listOf("turn left", "left turn", "left onto", "left on ", "take the left", "left toward", ", left"),
+        TurnKind.RIGHT to listOf("turn right", "right turn", "right onto", "right on ", "take the right", "right toward", ", right"),
         TurnKind.DEPART to listOf("go north", "go south", "go east", "go west", "head "),
         TurnKind.STRAIGHT to listOf("continue", "straight", "follow the road"),
     )
@@ -130,7 +130,7 @@ object NavTextParser {
 
     private fun kindOf(lower: String): TurnKind =
         PHRASES.firstOrNull { (_, phrases) -> phrases.any(lower::contains) }?.first
-            ?: TurnKind.STRAIGHT
+            ?: TurnKind.UNKNOWN
 
     private fun toMeters(m: MatchResult): Int? = toMeters(m.groupValues[1], m.groupValues[2])
 

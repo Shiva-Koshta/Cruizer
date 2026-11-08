@@ -68,6 +68,7 @@ class PodService : Service() {
 
     private var lastFrameSentAt = 0L
     private var lastTurn: TurnUpdate? = null
+    private var lastManeuver: Int? = null
     private var sentSplash = false
 
     /** No binding: the UI talks to the service through [Session] only. */
@@ -206,6 +207,7 @@ class PodService : Service() {
         }.launchIn(scope)
 
         Session.currentTurn.onEach { t ->
+            if (t == null) lastManeuver = null
             if (lastTurn == null && t != null) sentSplash = false
             lastTurn = t
             if (t != null && link.state.value == LinkState.DISCONNECTED) link.scanOrConnect(bleReady())
@@ -326,10 +328,13 @@ class PodService : Service() {
         val radar = Session.radar.value?.takeIf { s.radarEnabled && it in 1..300 }
         // Roundabout: per-exit icons are hardware-observed (Likely). RE canonically
         // sends the base roundabout icon; the playground verifies which the Pod draws.
-        val maneuver =
-            if (turn.kind == app.cruiser.proto.TurnKind.ROUNDABOUT && turn.exit != null) Icons.exitCode(turn.exit)
-            else turn.kind.code()
+        val maneuver = when {
+            turn.kind == app.cruiser.proto.TurnKind.ROUNDABOUT && turn.exit != null -> Icons.exitCode(turn.exit)
+            turn.kind != app.cruiser.proto.TurnKind.UNKNOWN -> turn.kind.code()
+            else -> lastManeuver ?: Icons.STRAIGHT.code
+        }
         if (maneuver < 0) return // unmappable instruction: re-send keeps the last icon (RE behavior)
+        lastManeuver = maneuver
         val bottom = when (s.bottomMode) {
             Session.BottomMode.ARRIVAL -> turn.arrivalSecondsFromNow
                 ?.let { PodProtocol.Bottom.Arrival(it, s.twelveHourClock) }
