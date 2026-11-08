@@ -5,8 +5,9 @@ import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -59,6 +60,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -67,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -76,6 +79,8 @@ import app.cruiser.PodService
 import app.cruiser.Session
 import app.cruiser.ble.LinkState
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -157,25 +162,46 @@ class MainActivity : ComponentActivity() {
         val scope = rememberCoroutineScope()
         var inPlayground by remember { mutableStateOf(false) }
 
-        // BackHandler: Playground -> Settings -> Home -> Exit
-        BackHandler(enabled = inPlayground || pagerState.currentPage != 0) {
-            if (inPlayground) {
-                inPlayground = false
-            } else {
-                scope.launch { pagerState.animateScrollToPage(0) }
+        var backProgress by remember { mutableFloatStateOf(0f) }
+        val isBackEnabled = inPlayground || pagerState.currentPage != 0
+
+        // True Android 14/15 Predictive Back Gesture (tracks swipe progress)
+        PredictiveBackHandler(enabled = isBackEnabled) { progress: Flow<BackEventCompat> ->
+            try {
+                progress.collect { backEvent ->
+                    backProgress = backEvent.progress
+                }
+                if (inPlayground) {
+                    inPlayground = false
+                } else if (pagerState.currentPage != 0) {
+                    scope.launch { pagerState.animateScrollToPage(0) }
+                }
+            } catch (_: CancellationException) {
+            } finally {
+                backProgress = 0f
             }
         }
+
+        val backScale = 1f - (backProgress * 0.08f)
+        val backCorner = (backProgress * 28f).dp
 
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing),
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .graphicsLayer {
+                    scaleX = backScale
+                    scaleY = backScale
+                    clip = backProgress > 0f
+                    shape = RoundedCornerShape(backCorner)
+                },
         ) {
             if (inPlayground) {
                 PlaygroundScreen(onBack = { inPlayground = false })
             } else {
                 HorizontalPager(
                     state = pagerState,
+                    beyondViewportPageCount = 1,
                     modifier = Modifier.fillMaxSize(),
                 ) { pageIndex ->
                     when (pageIndex) {
@@ -189,7 +215,7 @@ class MainActivity : ComponentActivity() {
             if (!inPlayground) {
                 Surface(
                     shape = CircleShape,
-                    color = if (s.liquidGlassMode != Session.LiquidGlassMode.OFF) Color.Transparent
+                    color = if (s.liquidGlass) Color.Transparent
                     else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.95f),
                     tonalElevation = 8.dp,
                     shadowElevation = 12.dp,
@@ -198,7 +224,7 @@ class MainActivity : ComponentActivity() {
                         .navigationBarsPadding()
                         .padding(bottom = 12.dp)
                         .height(60.dp)
-                        .liquidGlass(s.liquidGlassMode, shape = CircleShape),
+                        .liquidGlass(s.liquidGlass, shape = CircleShape),
                 ) {
                     Row(
                         modifier = Modifier

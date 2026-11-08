@@ -395,11 +395,14 @@ class PodService : Service() {
     private fun startLiveLocation() {
         if (!hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)) return
         val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        lm.allProviders.forEach { p ->
-            try {
-                lm.requestLocationUpdates(p, 1000L, 0f, liveLocationListener, mainLooper)
-            } catch (_: Exception) {
-            }
+        val provider = when {
+            lm.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
+            lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
+            else -> lm.allProviders.firstOrNull() ?: return
+        }
+        try {
+            lm.requestLocationUpdates(provider, 1000L, 1.0f, liveLocationListener, mainLooper)
+        } catch (_: Exception) {
         }
     }
 

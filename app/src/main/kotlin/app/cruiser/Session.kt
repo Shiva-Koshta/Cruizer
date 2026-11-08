@@ -62,8 +62,7 @@ object Session {
                         twelveHourClock = p[booleanPreferencesKey("clock_12h")] ?: false,
                         // Indian standard units (metric: km, km/h, km/L, Liters) by default unless toggled
                         imperial = p[booleanPreferencesKey("imperial")] ?: false,
-                        liquidGlassMode = LiquidGlassMode.entries
-                            .getOrElse(p[intPreferencesKey(KEY_LIQUID_GLASS)] ?: 1) { LiquidGlassMode.OPTIMIZED },
+                        liquidGlass = p[booleanPreferencesKey("liquid_glass")] ?: true,
                     )
                     var pods = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
                     val rememberedMac = context.getSharedPreferences("pod", Context.MODE_PRIVATE)
@@ -85,8 +84,6 @@ object Session {
 
     /** The app's own theme; independent of the night-mode setting. */
     enum class ThemeMode { SYSTEM, LIGHT, DARK }
-
-    enum class LiquidGlassMode { OFF, OPTIMIZED, FULL_BLUR }
 
     enum class PhoneCall { NONE, INCOMING, ACTIVE }
 
@@ -127,7 +124,7 @@ object Session {
         val twelveHourClock: Boolean = false,
         /** Indian standard units (km, km/h, km/L, Liters) by default; imperial feet/miles when true */
         val imperial: Boolean = false,
-        val liquidGlassMode: LiquidGlassMode = LiquidGlassMode.OPTIMIZED,
+        val liquidGlass: Boolean = true,
     )
 
     private val _settings = MutableStateFlow(Settings())
@@ -201,7 +198,7 @@ object Session {
                 it[intPreferencesKey(KEY_CYCLE_INTERVAL)] = next.cycleIntervalSeconds
                 it[booleanPreferencesKey("clock_12h")] = next.twelveHourClock
                 it[booleanPreferencesKey("imperial")] = next.imperial
-                it[intPreferencesKey(KEY_LIQUID_GLASS)] = next.liquidGlassMode.ordinal
+                it[booleanPreferencesKey("liquid_glass")] = next.liquidGlass
             }
         }
     }

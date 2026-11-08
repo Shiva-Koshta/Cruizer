@@ -23,20 +23,21 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.cruiser.Session
-import app.cruiser.Session.LiquidGlassMode
 
 /**
- * Material You + Liquid Glass hybrid modifier with a gradient of transparency.
- * Top: 78% rich Material You dynamic tone -> Slopes down to 35% translucent liquid glass.
- * Specular hairline glint along the perimeter edge.
+ * Material You + Liquid Glass hybrid styling modifier.
+ * Creates an authentic vertical gradient of transparency:
+ * Top: 78% opacity rich Material You dynamic tone -> Slopes down to 25% translucent liquid glass.
+ * Specular hairline rim along the perimeter.
+ * Caches all gradient shaders with `remember` for locked 120fps scrolling.
  */
 @Composable
 fun Modifier.liquidGlass(
-    mode: LiquidGlassMode,
+    enabled: Boolean,
     shape: Shape = RoundedCornerShape(24.dp),
     borderWidth: Dp = 1.dp,
 ): Modifier {
-    if (mode == LiquidGlassMode.OFF) return this
+    if (!enabled) return this
 
     val dark = isSystemInDarkTheme()
     val topColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -44,17 +45,17 @@ fun Modifier.liquidGlass(
 
     val glassBackground = remember(dark, topColor, bottomColor) {
         Brush.verticalGradient(
-            0.0f to topColor.copy(alpha = if (dark) 0.80f else 0.88f),
-            0.45f to topColor.copy(alpha = if (dark) 0.62f else 0.70f),
-            1.0f to bottomColor.copy(alpha = if (dark) 0.35f else 0.45f),
+            0.0f to topColor.copy(alpha = if (dark) 0.78f else 0.85f),
+            0.40f to topColor.copy(alpha = if (dark) 0.55f else 0.65f),
+            1.0f to bottomColor.copy(alpha = if (dark) 0.25f else 0.35f),
         )
     }
 
     val glassBorder = remember(dark) {
         Brush.linearGradient(
-            0.0f to Color.White.copy(alpha = if (dark) 0.50f else 0.65f),
-            0.35f to Color.White.copy(alpha = 0.15f),
-            0.85f to Color.White.copy(alpha = 0.04f),
+            0.0f to Color.White.copy(alpha = if (dark) 0.45f else 0.60f),
+            0.35f to Color.White.copy(alpha = 0.12f),
+            0.85f to Color.White.copy(alpha = 0.03f),
             1.0f to Color.Transparent,
         )
     }
@@ -79,7 +80,7 @@ fun Modifier.liquidGlass(
 
 /**
  * Universal Material You + Liquid Glass Card used across Home and Settings.
- * Blends rich dynamic Material You colors at the top into translucent liquid glass at the bottom.
+ * Slopes from rich dynamic Material You colors at the top into translucent liquid glass at the bottom.
  * Caches all gradient shaders with `remember` for locked 120fps scrolling.
  */
 @Composable
@@ -89,7 +90,7 @@ fun CruiserGlassCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val s by Session.settings.collectAsState()
-    val isGlass = s.liquidGlassMode != LiquidGlassMode.OFF
+    val isGlass = s.liquidGlass
     val dark = isSystemInDarkTheme()
     val topColor = MaterialTheme.colorScheme.surfaceContainerHigh
     val bottomColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -99,8 +100,8 @@ fun CruiserGlassCard(
         else {
             Brush.verticalGradient(
                 0.0f to topColor.copy(alpha = if (dark) 0.78f else 0.85f),
-                0.40f to topColor.copy(alpha = if (dark) 0.58f else 0.68f),
-                1.0f to bottomColor.copy(alpha = if (dark) 0.32f else 0.42f),
+                0.40f to topColor.copy(alpha = if (dark) 0.55f else 0.65f),
+                1.0f to bottomColor.copy(alpha = if (dark) 0.25f else 0.35f),
             )
         }
     }
