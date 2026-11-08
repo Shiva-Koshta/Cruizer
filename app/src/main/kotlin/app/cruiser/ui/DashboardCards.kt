@@ -310,7 +310,6 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val savedPods by Session.savedPods.collectAsState()
     val linkState by Session.linkState.collectAsState()
-    val settings by Session.settings.collectAsState()
     var renamingPod by remember { mutableStateOf<Session.SavedPod?>(null) }
 
     CruiserGlassCard(
@@ -509,10 +508,6 @@ private fun formatDuration(seconds: Long): String {
 }
 
 private fun formatClock(secondsFromNow: Int): String {
-    val cal = java.util.Calendar.getInstance().apply {
-        add(java.util.Calendar.SECOND, secondsFromNow)
-    }
-    val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
-    val m = cal.get(java.util.Calendar.MINUTE)
-    return "%02d:%02d".format(h, m)
+    val t = java.time.LocalTime.now().plusSeconds(secondsFromNow.toLong())
+    return "%02d:%02d".format(t.hour, t.minute)
 }

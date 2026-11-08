@@ -1,11 +1,13 @@
 package app.cruiser.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -35,6 +37,32 @@ import app.cruiser.BuildConfig
 import app.cruiser.Session
 
 /** Settings in their own tab; frame playground lives here on debug builds. */
+private val THEME_OPTIONS = listOf(
+    Session.ThemeMode.SYSTEM to "system",
+    Session.ThemeMode.LIGHT to "light",
+    Session.ThemeMode.DARK to "dark",
+)
+
+private val NIGHT_OPTIONS = listOf(
+    Session.NightMode.DAY to "day",
+    Session.NightMode.NIGHT to "night",
+    Session.NightMode.AUTO to "auto",
+)
+
+private val BOTTOM_OPTIONS = listOf(
+    Session.BottomMode.TOTAL to "distance",
+    Session.BottomMode.REMAINING to "time left",
+    Session.BottomMode.ARRIVAL to "arrival",
+    Session.BottomMode.CYCLE to "cycle",
+)
+
+private val CYCLE_OPTIONS = listOf(
+    3 to "3s",
+    5 to "5s",
+    10 to "10s",
+    15 to "15s",
+)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
@@ -43,6 +71,8 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
 
     Column(
         modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -53,11 +83,7 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
             Column(Modifier.padding(2.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Theme", style = MaterialTheme.typography.titleSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(
-                        Session.ThemeMode.SYSTEM to "system",
-                        Session.ThemeMode.LIGHT to "light",
-                        Session.ThemeMode.DARK to "dark",
-                    ).forEach { (m, label) ->
+                    THEME_OPTIONS.forEach { (m, label) ->
                         FilterChip(
                             selected = s.themeMode == m,
                             onClick = { Session.updateSettings { it.copy(themeMode = m) } },
@@ -68,11 +94,7 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
 
                 Text("Pod night mode", style = MaterialTheme.typography.titleSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(
-                        Session.NightMode.DAY to "day",
-                        Session.NightMode.NIGHT to "night",
-                        Session.NightMode.AUTO to "auto",
-                    ).forEach { (m, label) ->
+                    NIGHT_OPTIONS.forEach { (m, label) ->
                         FilterChip(
                             selected = s.nightMode == m,
                             onClick = { Session.updateSettings { it.copy(nightMode = m) } },
@@ -83,12 +105,7 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
 
                 Text("Bottom line", style = MaterialTheme.typography.titleSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(
-                        Session.BottomMode.TOTAL to "distance",
-                        Session.BottomMode.REMAINING to "time left",
-                        Session.BottomMode.ARRIVAL to "arrival",
-                        Session.BottomMode.CYCLE to "cycle",
-                    ).forEach { (m, label) ->
+                    BOTTOM_OPTIONS.forEach { (m, label) ->
                         FilterChip(
                             selected = s.bottomMode == m,
                             onClick = { Session.updateSettings { it.copy(bottomMode = m) } },
@@ -100,7 +117,7 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                 if (s.bottomMode == Session.BottomMode.CYCLE) {
                     Text("Cycle interval", style = MaterialTheme.typography.bodySmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(3 to "3s", 5 to "5s", 10 to "10s", 15 to "15s").forEach { (sec, label) ->
+                        CYCLE_OPTIONS.forEach { (sec, label) ->
                             FilterChip(
                                 selected = s.cycleIntervalSeconds == sec,
                                 onClick = { Session.updateSettings { it.copy(cycleIntervalSeconds = sec) } },
@@ -123,7 +140,7 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
         }
 
         val context = androidx.compose.ui.platform.LocalContext.current
-        val comapsPerms = app.cruiser.notify.ComapsSource.permissions(context)
+        val comapsPerms = remember(context) { app.cruiser.notify.ComapsSource.permissions(context) }
         if (comapsPerms.isNotEmpty()) {
             val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
                 androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
