@@ -76,10 +76,13 @@ fun LiveTripCard(modifier: Modifier = Modifier) {
     val settings by Session.settings.collectAsState()
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .liquidGlass(settings.liquidGlassMode, shape = RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = if (settings.liquidGlassMode != Session.LiquidGlassMode.OFF) Color.Transparent
+            else MaterialTheme.colorScheme.surfaceContainerHigh,
         ),
     ) {
         Column(
@@ -313,12 +316,18 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val savedPods by Session.savedPods.collectAsState()
     val linkState by Session.linkState.collectAsState()
+    val settings by Session.settings.collectAsState()
     var renamingPod by remember { mutableStateOf<Session.SavedPod?>(null) }
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .liquidGlass(settings.liquidGlassMode, shape = RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = CardDefaults.cardColors(
+            containerColor = if (settings.liquidGlassMode != Session.LiquidGlassMode.OFF) Color.Transparent
+            else MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
     ) {
         Column(
             modifier = Modifier.padding(20.dp),

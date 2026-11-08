@@ -116,6 +116,21 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                 SettingSwitch("Imperial units", s.imperial) { v ->
                     Session.updateSettings { it.copy(imperial = v) }
                 }
+
+                Text("UI Style & Effects", style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        Session.LiquidGlassMode.OFF to "Material 3 (Off)",
+                        Session.LiquidGlassMode.OPTIMIZED to "Optimized Glass",
+                        Session.LiquidGlassMode.FULL_BLUR to "Full Blur",
+                    ).forEach { (mode, label) ->
+                        FilterChip(
+                            selected = s.liquidGlassMode == mode,
+                            onClick = { Session.updateSettings { it.copy(liquidGlassMode = mode) } },
+                            label = { Text(label) },
+                        )
+                    }
+                }
             }
         }
 

@@ -145,6 +145,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Tabs(modifier: Modifier = Modifier) {
         val current by page.collectAsState()
+        val s by Session.settings.collectAsState()
         val pagerState = rememberPagerState(initialPage = 0) { 2 } // 0 = POD (Bike), 1 = SETTINGS
         val scope = rememberCoroutineScope()
 
@@ -197,14 +198,16 @@ class MainActivity : ComponentActivity() {
             if (current != Page.PLAYGROUND) {
                 Surface(
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.95f),
+                    color = if (s.liquidGlassMode != Session.LiquidGlassMode.OFF) Color.Transparent
+                    else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.95f),
                     tonalElevation = 8.dp,
                     shadowElevation = 12.dp,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
                         .padding(bottom = 12.dp)
-                        .height(60.dp),
+                        .height(60.dp)
+                        .liquidGlass(s.liquidGlassMode, shape = CircleShape),
                 ) {
                     Row(
                         modifier = Modifier
@@ -264,6 +267,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun PodScreen(modifier: Modifier = Modifier) {
     val state by Session.linkState.collectAsState()
+    val s by Session.settings.collectAsState()
     val context = LocalContext.current
     val enableBt = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -284,10 +288,13 @@ private fun PodScreen(modifier: Modifier = Modifier) {
 
         // Connection Status Card
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .liquidGlass(s.liquidGlassMode, shape = RoundedCornerShape(24.dp)),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(
-                containerColor = when (state) {
+                containerColor = if (s.liquidGlassMode != Session.LiquidGlassMode.OFF) Color.Transparent
+                else when (state) {
                     LinkState.CONNECTED -> Color(0xFF1B5E20).copy(alpha = 0.12f)
                     LinkState.CONNECTING, LinkState.SCANNING -> Color(0xFFE65100).copy(alpha = 0.12f)
                     else -> MaterialTheme.colorScheme.surfaceContainerHigh

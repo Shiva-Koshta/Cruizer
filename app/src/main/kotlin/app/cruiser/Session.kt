@@ -35,6 +35,7 @@ object Session {
     private const val KEY_THEME = "theme_mode"
     private const val KEY_CYCLE_INTERVAL = "cycle_interval"
     private const val KEY_SAVED_PODS = "saved_pods"
+    private const val KEY_LIQUID_GLASS = "liquid_glass_mode"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -61,6 +62,8 @@ object Session {
                         twelveHourClock = p[booleanPreferencesKey("clock_12h")] ?: false,
                         // Indian standard units (metric: km, km/h, km/L, Liters) by default unless toggled
                         imperial = p[booleanPreferencesKey("imperial")] ?: false,
+                        liquidGlassMode = LiquidGlassMode.entries
+                            .getOrElse(p[intPreferencesKey(KEY_LIQUID_GLASS)] ?: 1) { LiquidGlassMode.OPTIMIZED },
                     )
                     var pods = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
                     val rememberedMac = context.getSharedPreferences("pod", Context.MODE_PRIVATE)
@@ -82,6 +85,8 @@ object Session {
 
     /** The app's own theme; independent of the night-mode setting. */
     enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+    enum class LiquidGlassMode { OFF, OPTIMIZED, FULL_BLUR }
 
     enum class PhoneCall { NONE, INCOMING, ACTIVE }
 
@@ -122,6 +127,7 @@ object Session {
         val twelveHourClock: Boolean = false,
         /** Indian standard units (km, km/h, km/L, Liters) by default; imperial feet/miles when true */
         val imperial: Boolean = false,
+        val liquidGlassMode: LiquidGlassMode = LiquidGlassMode.OPTIMIZED,
     )
 
     private val _settings = MutableStateFlow(Settings())
@@ -195,6 +201,7 @@ object Session {
                 it[intPreferencesKey(KEY_CYCLE_INTERVAL)] = next.cycleIntervalSeconds
                 it[booleanPreferencesKey("clock_12h")] = next.twelveHourClock
                 it[booleanPreferencesKey("imperial")] = next.imperial
+                it[intPreferencesKey(KEY_LIQUID_GLASS)] = next.liquidGlassMode.ordinal
             }
         }
     }
