@@ -44,6 +44,7 @@
         <activity
             android:exported="true"
             android:name=".ui.MainActivity"
+            android:launchMode="singleTask"
             android:icon="@mipmap/ic_launcher"
             android:roundIcon="@mipmap/ic_launcher_round">
             <intent-filter>
