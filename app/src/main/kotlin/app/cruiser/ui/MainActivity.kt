@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -30,7 +33,9 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +44,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,9 +55,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.cruiser.PodService
 import app.cruiser.Session
 import app.cruiser.ble.LinkState
@@ -171,11 +180,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Connection card only — the Pod's whole story on its own tab. */
+/** Connection card, live trip dashboard, and multi-pod management on the Home tab. */
 @Composable
 private fun PodScreen(modifier: Modifier = Modifier) {
     val state by Session.linkState.collectAsState()
-    val turn by Session.currentTurn.collectAsState()
     val context = LocalContext.current
     val enableBt = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -185,77 +193,145 @@ private fun PodScreen(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("Cruiser", style = MaterialTheme.typography.headlineMedium)
+        // App Header
+        Column {
+            Text("Cruiser", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold))
+            Text("Royal Enfield Tripper Pod", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    when (state) {
-                        LinkState.CONNECTED -> "Connected to the Tripper Pod"
-                        LinkState.CONNECTING -> "Connecting…"
-                        LinkState.SCANNING -> "Scanning for the Pod — turn the ignition on"
-                        LinkState.BT_OFF -> "Bluetooth is off"
-                        LinkState.NO_PERMISSIONS -> "Bluetooth permission missing"
-                        LinkState.DISCONNECTED -> "Disconnected"
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                if (state == LinkState.CONNECTING || state == LinkState.SCANNING) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // Connection Status Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = when (state) {
+                    LinkState.CONNECTED -> Color(0xFF1B5E20).copy(alpha = 0.12f)
+                    LinkState.CONNECTING, LinkState.SCANNING -> Color(0xFFE65100).copy(alpha = 0.12f)
+                    else -> MaterialTheme.colorScheme.surfaceContainerHigh
+                },
+            ),
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = when (state) {
+                            LinkState.CONNECTED -> Color(0xFF2E7D32)
+                            LinkState.CONNECTING, LinkState.SCANNING -> Color(0xFFEF6C00)
+                            else -> MaterialTheme.colorScheme.surfaceVariant
+                        },
                     ) {
-                        CircularProgressIndicator()
-                        Text(
-                            when (state) {
-                                LinkState.CONNECTING -> "Handshaking with the Pod"
-                                else -> "The Pod advertises for ~30 s after ignition-on"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-                turn?.let { t ->
-                    Text(
-                        "Last instruction: ${t.kind} ${t.distanceM ?: "-"} m" +
-                            (t.exit?.let { ", exit $it" } ?: ""),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    when (state) {
-                        LinkState.CONNECTED, LinkState.CONNECTING, LinkState.SCANNING -> {
-                            OutlinedButton(onClick = context::podStop) { Text("Disconnect") }
-                            OutlinedButton(onClick = context::podForget) { Text("Forget Pod") }
-                        }
-                        LinkState.DISCONNECTED -> {
-                            Button(onClick = context::podStart) { Text("Connect") }
-                        }
-                        else -> {
-                            Button(onClick = context::podStart, enabled = false) {
-                                Text(if (state == LinkState.BT_OFF) "Bluetooth off" else "Permissions needed")
-                            }
-                            if (state == LinkState.BT_OFF) {
-                                // GrapheneOS auto-off leaves riders here; one tap fixes it.
-                                Button(
-                                    onClick = {
-                                        enableBt.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                                    },
-                                ) { Text("Turn on Bluetooth") }
-                            }
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                when (state) {
+                                    LinkState.CONNECTED -> "🏍️ Connected"
+                                    LinkState.CONNECTING -> "⚡ Connecting"
+                                    LinkState.SCANNING -> "🔍 Scanning"
+                                    LinkState.BT_OFF -> "⚠️ Bluetooth Off"
+                                    LinkState.NO_PERMISSIONS -> "🔒 Permissions Needed"
+                                    LinkState.DISCONNECTED -> "💤 Disconnected"
+                                },
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when (state) {
+                                    LinkState.CONNECTED, LinkState.CONNECTING, LinkState.SCANNING -> Color.White
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
                         }
                     }
+
+                    if (state == LinkState.CONNECTING || state == LinkState.SCANNING) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                    }
                 }
+
                 Text(
-                    "Turn-by-turn instructions come from your nav app's persistent notification.",
-                    style = MaterialTheme.typography.bodySmall,
+                    when (state) {
+                        LinkState.CONNECTED -> "Streaming navigation instructions to your motorcycle dial."
+                        LinkState.CONNECTING -> "Handshaking with the Tripper Pod PIN authentication."
+                        LinkState.SCANNING -> "Turn the motorcycle ignition on. Pod advertises for ~30 seconds."
+                        LinkState.BT_OFF -> "Turn on Bluetooth to connect to your motorcycle."
+                        LinkState.NO_PERMISSIONS -> "Bluetooth Connect & Scan permissions are required."
+                        LinkState.DISCONNECTED -> "Connect to beam turn-by-turn directions directly to your Pod."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                // Actions Row
+                when (state) {
+                    LinkState.CONNECTED -> {
+                        Button(
+                            onClick = { context.podStop() },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text("Disconnect")
+                        }
+                    }
+                    LinkState.CONNECTING, LinkState.SCANNING -> {
+                        OutlinedButton(
+                            onClick = { context.podStop() },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text("Cancel Search")
+                        }
+                    }
+                    LinkState.DISCONNECTED -> {
+                        Button(
+                            onClick = { context.podStart() },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text("Connect to Pod")
+                        }
+                    }
+                    LinkState.BT_OFF -> {
+                        Button(
+                            onClick = { enableBt.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text("Turn on Bluetooth")
+                        }
+                    }
+                    LinkState.NO_PERMISSIONS -> {
+                        Button(
+                            onClick = { MainActivity.gate.value = MainActivity.gate.value + 1 },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text("Grant Permissions")
+                        }
+                    }
+                }
             }
         }
-        Spacer(Modifier.height(24.dp))
+
+        // Live Trip & Navigation Dashboard Card
+        LiveTripCard()
+
+        // Multi-Pod Saved Bikes Card
+        SavedPodsCard()
+
+        Spacer(Modifier.height(16.dp))
     }
 }
 
@@ -289,19 +365,22 @@ private fun PinDialog() {
     )
 }
 
-internal fun Context.podStart() {
+internal fun Context.podStart(mac: String? = null) {
     // Instant press feedback; the service overwrites this with real states.
     Session.linkState.value = LinkState.CONNECTING
-    ContextCompat.startForegroundService(
-        this,
-        Intent(this, PodService::class.java).setAction(PodService.ACTION_START),
-    )
+    val intent = Intent(this, PodService::class.java).setAction(PodService.ACTION_START)
+    if (mac != null) intent.putExtra(PodService.EXTRA_MAC, mac)
+    ContextCompat.startForegroundService(this, intent)
 }
 
 internal fun Context.podStop() {
+    Session.linkState.value = LinkState.DISCONNECTED
     startService(Intent(this, PodService::class.java).setAction(PodService.ACTION_STOP))
 }
 
-internal fun Context.podForget() {
-    startService(Intent(this, PodService::class.java).setAction(PodService.ACTION_FORGET))
+internal fun Context.podForget(mac: String? = null) {
+    Session.linkState.value = LinkState.DISCONNECTED
+    val intent = Intent(this, PodService::class.java).setAction(PodService.ACTION_FORGET)
+    if (mac != null) intent.putExtra(PodService.EXTRA_MAC, mac)
+    startService(intent)
 }

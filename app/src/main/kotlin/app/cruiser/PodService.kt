@@ -49,6 +49,7 @@ class PodService : Service() {
         const val ACTION_START = "app.cruiser.START"
         const val ACTION_STOP = "app.cruiser.STOP"
         const val ACTION_FORGET = "app.cruiser.FORGET"
+        const val EXTRA_MAC = "extra_mac"
         private const val CHANNEL_ID = "pod"
         private const val NOTIF_ID = 42
         private const val KEY_MAC = "pod_mac"
@@ -164,9 +165,16 @@ class PodService : Service() {
             hasPerm(Manifest.permission.BLUETOOTH_SCAN)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val targetMac = intent?.getStringExtra(EXTRA_MAC)
+        if (targetMac != null) {
+            link.deviceAddress.value = targetMac
+            link.scanOrConnect(bleReady())
+        } else if (intent?.action == ACTION_START) {
+            link.scanOrConnect(bleReady())
+        }
         when (intent?.action) {
             ACTION_STOP -> stopSelf()
-            ACTION_FORGET -> forgetPod()
+            ACTION_FORGET -> forgetPod(targetMac)
         }
         return START_STICKY
     }
@@ -273,7 +281,11 @@ class PodService : Service() {
         }
     }
 
-    fun forgetPod() {
+    fun forgetPod(mac: String? = null) {
+        val target = mac ?: link.deviceAddress.value
+        if (target != null) {
+            Session.removeSavedPod(target)
+        }
         getSharedPreferences("pod", Context.MODE_PRIVATE).edit().clear().apply()
         link.deviceAddress.value = null
         if (bleReady()) link.disconnect()
