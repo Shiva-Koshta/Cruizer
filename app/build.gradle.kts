@@ -11,7 +11,7 @@ android {
         applicationId = "app.cruiser"
         minSdk = 31
         targetSdk = 37
-        versionCode = 26
+        versionCode = 27
         versionName = "0.4.1-perf-grapheneos-120hz"
     }
 
