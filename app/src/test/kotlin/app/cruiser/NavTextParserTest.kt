@@ -144,4 +144,24 @@ class NavTextParserTest {
         assertEquals(TurnKind.OFF_RAMP_RIGHT, exit.update.kind)
         assertEquals(800, exit.update.distanceM)
     }
+
+    @Test
+    fun googleMapsThreePartSubTextWithEta() {
+        // "13 min · 4.6 mi · 11:55 ETA" parsed at 11:00 AM -> 55 min arrival
+        val p = NavTextParser.parse("Turn left\n13 min · 4.6 mi · 11:55 ETA", now(11, 0)) as Parsed.Turn
+        assertEquals(TurnKind.LEFT, p.update.kind)
+        assertEquals(13 * 60, p.update.remainingSeconds)
+        assertEquals(7403, p.update.routeRemainingM) // 4.6 * 1609.34
+        assertEquals(55 * 60, p.update.arrivalSecondsFromNow)
+    }
+
+    @Test
+    fun googleMapsThreePartSubText24hClock() {
+        // "24 min · 12 km · 17:30" parsed at 16:30 -> 60 min arrival
+        val p = NavTextParser.parse("Turn right\n24 min · 12 km · 17:30", now(16, 30)) as Parsed.Turn
+        assertEquals(TurnKind.RIGHT, p.update.kind)
+        assertEquals(24 * 60, p.update.remainingSeconds)
+        assertEquals(12_000, p.update.routeRemainingM)
+        assertEquals(60 * 60, p.update.arrivalSecondsFromNow)
+    }
 }

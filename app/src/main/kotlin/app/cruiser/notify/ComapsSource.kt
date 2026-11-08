@@ -174,7 +174,7 @@ object ComapsSource {
             exit = if (kind == TurnKind.ROUNDABOUT) exitNum else null,
             next = null,
             nextDistanceM = null,
-            arrivalSecondsFromNow = null,
+            arrivalSecondsFromNow = timeSeconds,
             routeRemainingM = distToTarget?.let(NavTextParser::metersOf),
             remainingSeconds = timeSeconds,
             ended = kind == TurnKind.DESTINATION,

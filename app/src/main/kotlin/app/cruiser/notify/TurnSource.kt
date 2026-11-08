@@ -89,11 +89,20 @@ class TurnSource : NotificationListenerService() {
             if (title.isBlank() || parts.any { it.contains(title) }) parts else listOf(title) + parts
         val body = bodyParts.joinToString("\n").takeIf { it.isNotBlank() } ?: return
 
+        val iconKind = if (sbn.packageName == "com.google.android.apps.maps") {
+            GoogleMapsIconMatcher.matchIcon(sbn.notification.getLargeIcon(), this)
+        } else null
+
         when (val p = NavTextParser.parse(body)) {
             is NavTextParser.Parsed.Turn -> {
                 Session.postRadar(null) // a fresh turn means the camera alert is stale
                 if (p.update.ended) Session.navActive.value = false // arrived: route over
-                Session.postTurn(p.update)
+                val update = if (iconKind != null && iconKind != app.cruiser.proto.TurnKind.UNKNOWN) {
+                    p.update.copy(kind = iconKind)
+                } else {
+                    p.update
+                }
+                Session.postTurn(update)
             }
             is NavTextParser.Parsed.Camera -> Session.postRadar(p.meters)
             NavTextParser.Parsed.Idle -> {}

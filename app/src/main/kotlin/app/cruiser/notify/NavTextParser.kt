@@ -36,7 +36,14 @@ object NavTextParser {
     private val ARRIVED =
         Regex("""you (?:have )?(?:just )?arrived|reached your (?:destination|endpoint)""", RegexOption.IGNORE_CASE)
 
-    /** Google Maps bottom line: "24 min · 31 km" (also "20 mins · 5.2 mi", "24 min · 900 ft"). */
+    /** Google Maps 3-part bottom line: "13 min · 4.6 mi · 11:55 ETA" (also "24 min · 12 km · 5:30 PM", "24 min · 12 km · 17:30"). */
+    private val MAPS_BOTTOM_3 =
+        Regex(
+            """(\d+)\s*min[s]?\s*·\s*(\d+(?:[.,]\d+)?\s*(?:m\b|km\b|ft\b|feet\b|mi\b|miles?\b|yd\b))\s*·\s*(?:(?:eta\s*)?(\d{1,2}:\d{2})\s*(am|pm)?(?:\s*eta)?)""",
+            RegexOption.IGNORE_CASE,
+        )
+
+    /** Google Maps 2-part bottom line: "24 min · 31 km" (also "20 mins · 5.2 mi", "24 min · 900 ft"). */
     private val MAPS_BOTTOM =
         Regex(
             """(\d+)\s*min[s]?\s*·\s*(\d+(?:[.,]\d+)?)\s*(m\b|km\b|ft\b|feet\b|mi\b|miles?\b|yd\b)""",
@@ -106,7 +113,8 @@ object NavTextParser {
         val exit = EXIT.find(lower)?.groupValues
             ?.let { g -> (g[1].ifEmpty { g[2] }).toIntOrNull() }
             ?.takeIf { it in 1..9 }
-        val mapsBottom = MAPS_BOTTOM.find(lower)
+        val maps3 = MAPS_BOTTOM_3.find(lower)
+        val mapsBottom = maps3 ?: MAPS_BOTTOM.find(lower)
         val kind = kindOf(lower)
         return TurnUpdate(
             kind = kind,
@@ -118,7 +126,8 @@ object NavTextParser {
             arrivalSecondsFromNow = etaSeconds(lower, now),
             // Distance to destination only from the Maps bottom line: a second inline
             // distance is the *next* maneuver, not the route remaining.
-            routeRemainingM = mapsBottom?.let(::bottomRemaining),
+            routeRemainingM = maps3?.let { metersOf(it.groupValues[2]) }
+                ?: mapsBottom?.let(::bottomRemaining),
             remainingSeconds = remainingSeconds(lower)
                 ?: mapsBottom?.groupValues?.get(1)?.toIntOrNull()?.times(60),
             ended = kind == TurnKind.DESTINATION && distance == null,
@@ -150,14 +159,23 @@ object NavTextParser {
         }
     }
 
-    /** "arriving at 4:10 PM" clock ETA -> seconds from now (capped at 10 h). */
+    /** "arriving at 4:10 PM" or "11:55 ETA" clock -> seconds from now (capped at 10 h). */
     fun etaSeconds(lower: String, now: Calendar = Calendar.getInstance()): Int? {
-        val m = ARRIVAL.find(lower) ?: return null
-        var hour = m.groupValues[1].substringBefore(':').toIntOrNull() ?: return null
-        val minute = m.groupValues[1].substringAfter(':').toIntOrNull() ?: return null
+        ARRIVAL.find(lower)?.let { m ->
+            return etaSecondsFromClock(m.groupValues[1], m.groupValues[2].takeIf { it.isNotEmpty() }, now)
+        }
+        MAPS_BOTTOM_3.find(lower)?.let { m ->
+            return etaSecondsFromClock(m.groupValues[3], m.groupValues[4].takeIf { it.isNotEmpty() }, now)
+        }
+        return null
+    }
+
+    fun etaSecondsFromClock(clock: String, amPm: String?, now: Calendar = Calendar.getInstance()): Int? {
+        var hour = clock.substringBefore(':').toIntOrNull() ?: return null
+        val minute = clock.substringAfter(':').toIntOrNull() ?: return null
         if (hour !in 0..23 || minute !in 0..59) return null
-        if (m.groupValues[2].equals("PM", true) && hour < 12) hour += 12
-        if (m.groupValues[2].equals("AM", true) && hour == 12) hour = 0
+        if (amPm.equals("PM", true) && hour < 12) hour += 12
+        if (amPm.equals("AM", true) && hour == 12) hour = 0
         var delta = (hour - now.get(Calendar.HOUR_OF_DAY)) * 60 +
             (minute - now.get(Calendar.MINUTE))
         if (delta < 0) delta += 24 * 60

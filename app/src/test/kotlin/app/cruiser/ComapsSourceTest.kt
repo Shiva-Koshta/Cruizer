@@ -16,6 +16,7 @@ class ComapsSourceTest {
         assertEquals(1200, u.distanceM)
         assertEquals(14_000, u.routeRemainingM)
         assertEquals(1200, u.remainingSeconds)
+        assertEquals(1200, u.arrivalSecondsFromNow)
         assertNull(u.exit)
     }
 
