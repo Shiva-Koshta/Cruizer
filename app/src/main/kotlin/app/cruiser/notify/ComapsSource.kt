@@ -113,7 +113,7 @@ object ComapsSource {
 
         fun query(ctx: Context) {
             scope.launch {
-                val pkg = installed(ctx).firstOrNull() ?: return@launch
+                val pkg = installed(ctx).firstOrNull { granted(ctx, it) } ?: return@launch
                 try {
                     val cursor = ctx.contentResolver.query(
                         Uri.parse("content://$pkg$AUTHORITY_SUFFIX/live"),
@@ -132,24 +132,34 @@ object ComapsSource {
                     val update = row?.let { turnUpdate(it.car, it.ped, it.distToTurn, it.distToTarget, it.timeSeconds, it.exitNum) }
                     when {
                         update != null -> {
+                            Session.navActive.value = true
                             Session.postTurn(update)
                             owned = true
                         }
                         owned -> {
                             // empty cursor = navigation ended; clear only our own turn
+                            Session.navActive.value = false
                             Session.postTurn(null)
                             owned = false
                         }
                     }
                 } catch (_: SecurityException) {
-                    // rider revoked CoMaps permission mid-session; nothing to do until re-granted
+                    // rider revoked CoMaps permission mid-session; drop own turn safely
+                    if (owned) {
+                        Session.navActive.value = false
+                        Session.postTurn(null)
+                        owned = false
+                    }
                 } catch (_: Exception) {
                 }
             }
         }
 
         fun dropOwnTurn() {
-            if (owned) Session.postTurn(null)
+            if (owned) {
+                Session.navActive.value = false
+                Session.postTurn(null)
+            }
             owned = false
         }
     }

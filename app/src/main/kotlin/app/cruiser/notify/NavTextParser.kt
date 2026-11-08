@@ -74,9 +74,9 @@ object NavTextParser {
         TurnKind.FERRY to listOf("ferry"),
         TurnKind.DESTINATION to listOf("arrive", "destination"),
         TurnKind.RE_ROUTE to listOf("re-routing", "rerouting", "recalculating", "finding new route"),
-        TurnKind.LEFT to listOf("turn left", "left turn", "left onto", "left on ", "take the left", "left toward", ", left"),
-        TurnKind.RIGHT to listOf("turn right", "right turn", "right onto", "right on ", "take the right", "right toward", ", right"),
-        TurnKind.DEPART to listOf("go north", "go south", "go east", "go west", "head "),
+        TurnKind.LEFT to listOf("turn left", "left turn", "left onto", "left on ", "take the left", "left toward"),
+        TurnKind.RIGHT to listOf("turn right", "right turn", "right onto", "right on ", "take the right", "right toward"),
+        TurnKind.DEPART to listOf("go north", "go south", "go east", "go west", "head north", "head south", "head east", "head west", "head toward", "heading "),
         TurnKind.STRAIGHT to listOf("continue", "straight", "follow the road"),
     )
 
@@ -179,6 +179,9 @@ object NavTextParser {
         if (amPm.equals("AM", true) && hour == 12) hour = 0
         var delta = (hour - now.get(Calendar.HOUR_OF_DAY)) * 60 +
             (minute - now.get(Calendar.MINUTE))
+        if (amPm == null && delta < 0 && hour <= 12) {
+            delta += 12 * 60
+        }
         if (delta < 0) delta += 24 * 60
         return delta.takeIf { it in 0..600 }?.times(60)
     }

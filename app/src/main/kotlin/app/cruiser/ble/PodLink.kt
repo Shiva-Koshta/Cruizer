@@ -96,14 +96,22 @@ class PodLink(private val context: Context) {
                 disconnect() // wrong device or a partial discovery; retry cleanly
                 return
             }
-            // Try notifications (RE does) — if the Pod never notifies, the mirror
-            // server path still delivers its replies.
-            g.setCharacteristicNotification(c, true)
-            c.getDescriptor(cccd)?.let { d ->
-                g.writeDescriptor(d, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-            }
             char = c
             _state.value = LinkState.CONNECTED
+            val d = c.getDescriptor(cccd)
+            if (d != null) {
+                g.setCharacteristicNotification(c, true)
+                @Suppress("DEPRECATION")
+                d.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                @Suppress("DEPRECATION")
+                g.writeDescriptor(d)
+            } else {
+                drain()
+            }
+        }
+
+        override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
+            if (client !== g) return
             drain()
         }
 

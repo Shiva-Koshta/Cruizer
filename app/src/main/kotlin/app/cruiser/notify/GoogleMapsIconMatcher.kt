@@ -351,11 +351,40 @@ object GoogleMapsIconMatcher {
     /** Packs 32x32 RGBA pixels into 32 ints (1 bit per pixel alpha/luminance). */
     fun packPixels(pixelsRGBA: IntArray): IntArray {
         val pack = IntArray(32)
+        // If transparent pixels exist, use alpha threshold (transparent canvas mode)
+        val hasTransparency = pixelsRGBA.any { (it ushr 24) < 128 }
+        if (hasTransparency) {
+            for (y in 0 until 32) {
+                var row = 0
+                for (x in 0 until 32) {
+                    val pixel = if ((pixelsRGBA[y * 32 + x] and 0x80000000.toInt()) != 0) 1 else 0
+                    row = (row shl 1) or pixel
+                }
+                pack[y] = row
+            }
+            return pack
+        }
+
+        // Opaque background badge: threshold bright foreground arrow pixels against background
+        var totalLum = 0L
+        for (p in pixelsRGBA) {
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            totalLum += (r * 299 + g * 587 + b * 114) / 1000
+        }
+        val avgLum = (totalLum / (32 * 32)).toInt()
+        val threshold = (avgLum + 35).coerceAtMost(220)
+
         for (y in 0 until 32) {
             var row = 0
             for (x in 0 until 32) {
-                val pixel = if ((pixelsRGBA[y * 32 + x] and 0x80000000.toInt()) != 0) 1 else 0
-                row = (row shl 1) or pixel
+                val p = pixelsRGBA[y * 32 + x]
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                val lum = (r * 299 + g * 587 + b * 114) / 1000
+                row = (row shl 1) or (if (lum >= threshold) 1 else 0)
             }
             pack[y] = row
         }

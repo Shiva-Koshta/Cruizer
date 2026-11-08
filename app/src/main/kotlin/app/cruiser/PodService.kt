@@ -217,6 +217,12 @@ class PodService : Service() {
                 if (BuildConfig.DEBUG) Log.i("CruiserNav", "routeStarted frame sent (on turn)")
             }
         }.launchIn(scope)
+
+        Session.settings.onEach {
+            if (link.state.value == LinkState.CONNECTED) {
+                sendSetTime()
+            }
+        }.launchIn(scope)
     }
 
     private fun handshake() {
@@ -237,8 +243,11 @@ class PodService : Service() {
             if (cmd[1] == 1.toByte()) {
                 markPaired()
                 awaitPin(false)
+                Session.pinRejected.value = false
                 sendSetTime()
-            } // 0x20 00 = rejected PIN: keep awaitingPin, user retypes
+            } else if (cmd[1] == 0.toByte()) {
+                Session.pinRejected.value = true
+            }
         }
         // 0x03 = Pod firmware/version, 0x30 = serial — not needed for driving frames.
     }
@@ -249,7 +258,7 @@ class PodService : Service() {
             PodProtocol.setTimeFrame(
                 hour24 = cal.get(java.util.Calendar.HOUR_OF_DAY),
                 minute = cal.get(java.util.Calendar.MINUTE),
-                is12hFormat = !android.text.format.DateFormat.is24HourFormat(this),
+                is12hFormat = Session.settings.value.twelveHourClock,
             )
         )
     }
@@ -438,8 +447,12 @@ class PodService : Service() {
     }
 
     private fun registerPhoneState() {
-        if (!hasPerm(Manifest.permission.READ_PHONE_STATE)) return
-        val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        if (!hasPerm(Manifest.permission.READ_PHONE_STATE)) {
+            telephonyCallback = null
+            Session.postCall(Session.PhoneCall.NONE)
+            return
+        }
+        val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return
         val cb = object : TelephonyCallback(), TelephonyCallback.CallStateListener {
             override fun onCallStateChanged(state: Int) {
                 Session.postCall(
@@ -454,13 +467,18 @@ class PodService : Service() {
         telephonyCallback = cb
         try {
             tm.registerTelephonyCallback(mainExecutor, cb)
+        } catch (_: SecurityException) {
+            telephonyCallback = null
+            Session.postCall(Session.PhoneCall.NONE)
         } catch (_: Exception) {
+            telephonyCallback = null
         }
     }
 
     private fun unregisterPhoneState() {
         val cb = telephonyCallback ?: return
-        val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        telephonyCallback = null
+        val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return
         try {
             tm.unregisterTelephonyCallback(cb)
         } catch (_: Exception) {

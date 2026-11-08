@@ -147,6 +147,7 @@ object Session {
     private val _savedPods = MutableStateFlow<List<SavedPod>>(emptyList())
     val savedPods: StateFlow<List<SavedPod>> = _savedPods
     val activeBikeMac = MutableStateFlow<String?>(null)
+    val pinRejected = MutableStateFlow(false)
 
     data class LiveRide(
         val isActive: Boolean = false,
@@ -181,7 +182,9 @@ object Session {
         val prev = lastLiveLoc
         lastLiveLoc = location
         val delta = prev?.distanceTo(location) ?: 0f
-        val add = if (prev != null && delta in 0.4f..150f) Math.round(delta) else 0
+        val dt = if (prev != null && location.time > prev.time) ((location.time - prev.time) / 1000f).coerceIn(1f, 30f) else 1f
+        val maxRealisticDelta = 50f * dt // Up to 180 km/h (50 m/s) allowed over elapsed interval
+        val add = if (prev != null && delta in 0.4f..maxRealisticDelta) Math.round(delta) else 0
         val newDist = current.distanceM + add
         val elapsedHours = elapsed / 3600.0
         val avgSpeed = if (elapsedHours > 0.0005) Math.round((newDist / 1000.0) / elapsedHours).toInt() else speedKmh
@@ -227,9 +230,9 @@ object Session {
         customCc: Int = 350,
         customKmpl: Double = 36.5,
     ) {
-        val trimmed = nickname.trim().ifEmpty { "Tripper Pod" }
+        val sanitized = nickname.replace('|', '/').replace('\n', ' ').trim().ifEmpty { "Tripper Pod" }
         val current = _savedPods.value.filter { it.mac != mac }
-        val updated = current + SavedPod(mac, trimmed, model, customCc, customKmpl)
+        val updated = current + SavedPod(mac, sanitized, model, customCc, customKmpl)
         _savedPods.value = updated
         if (activeBikeMac.value == null || activeBikeMac.value == mac) {
             selectBike(mac)
