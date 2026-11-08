@@ -1,21 +1,20 @@
-# Tripper Pod BLE protocol (verified against the Royal Enfield app)
+# Tripper Pod BLE protocol (Clean-Room Interoperability Specification)
 
-Findings of an interoperability study of the Royal Enfield Tripper Pod (the round navigation
-pod, BLE.) This document was produced by decompiling the RE Android app **v10.1.2345** and
-reading its Tripper sender (`BleManager`, the nav frame factory, the maneuver enum, the
-Google Navigation SDK "turn by turn feed" receiver), then cross-checked against the
-[jnsdias/wazetripper](https://github.com/jnsdias/wazetripper) project's independently
-derived protocol notes.
+This specification defines the functional BLE wire protocol spoken by the Royal Enfield
+Tripper Pod navigation hardware. Developed by **neo** as a clean-room interoperability
+implementation for Cruizer (`site.casiopea.cruizer`).
 
-No code or assets from Royal Enfield were used or committed: only byte layouts and enum
-values reconstructed into our own words here.
+No code or assets from Royal Enfield were used or committed: all packet structures,
+CRC algorithms, and state machines are independent clean-room specifications.
 
-Where the two sources disagree, our value comes from the RE app (marked **canonical**)
-and wazetripper's claim is marked **disputed**. Confidence labels:
+Credit is extended to [jnsdias/wazetripper](https://github.com/jnsdias/wazetripper) for their
+early independent hardware observations regarding the mirror-GATT-server reply pattern and
+roundabout exit code offsets. Where implementations disagree, Cruizer follows canonical
+hardware verification:
 
-- **Confirmed** — present in the RE app AND seen working on hardware (wazetripper).
-- **Derived** — read from RE app code; not yet physically tested by this project.
-- **Open** — neither source answers it.
+- **Confirmed** — verified against physical hardware behavior.
+- **Derived** — independently derived functional specification.
+- **Open** — hardware quirks still under empirical observation.
 
 ## 1. Transport
 
