@@ -56,6 +56,9 @@ class PodService : Service() {
         private const val KEY_PAIRED = "pod_paired"
         private const val CONNECT_PAUSE_MS = 1000L
         private const val RESUME_PREAMBLE_MS = 200L
+
+        /** Don't keep the foreground process alive forever with no Pod around. */
+        private const val STOP_AFTER_DISCONNECTED_MS = 5 * 60 * 1000L
     }
 
     inner class LocalBinder : Binder() {
@@ -119,8 +122,16 @@ class PodService : Service() {
             // attempts keep pacing in the background.
             var reconnectCountdown = 0
             var failedDirect = 0
+            var disconnectedMs = 0L
             while (isActive) {
                 if (link.state.value != LinkState.CONNECTED) {
+                    disconnectedMs += CONNECT_PAUSE_MS
+                    if (disconnectedMs > STOP_AFTER_DISCONNECTED_MS) {
+                        // Pod never showed up (ignition off / forgotten) — don't
+                        // burn battery scanning all day. "Connect" revives this.
+                        stopSelf()
+                        break
+                    }
                     if (--reconnectCountdown <= 0) {
                         // A remembered MAC that never completes (Pod re-paired,
                         // asleep, out of range) would loop forever: after a few
@@ -136,6 +147,7 @@ class PodService : Service() {
                 } else {
                     reconnectCountdown = 0
                     failedDirect = 0
+                    disconnectedMs = 0
                 }
                 val now = System.currentTimeMillis()
                 if (link.state.value == LinkState.CONNECTED) tick()
