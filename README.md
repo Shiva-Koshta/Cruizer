@@ -1,17 +1,17 @@
-# Cruiser
+# Cruizer
 
-A FOSS dashboard for the Royal Enfield **Tripper Pod**: pairs your phone to the
+A FOSS dashboard for the Royal Enfield **Tripper Pod** authored by **neo**: pairs your phone to the
 round motorcycle display over BLE and drives it with turn-by-turn navigation
 from your installed nav apps (OsmAnd, CoMaps, Organic Maps, Google Maps, Waze).
 No cloud, no account, no Royal Enfield code.
 
 ## How it works
 
-- A foreground service (`app.cruiser.PodService`) stays connected to the Pod,
+- A foreground service (`site.casiopea.cruizer.PodService`) stays connected to the Pod,
   mirrors the RE-app BLE behavior (client + mirror GATT server, serialized
   20-byte CRC-16/CCITT-FALSE frames), and re-renders the screen at 1 Hz — that
   refresh doubles as the Pod's watchdog feed.
-- A notification listener (`app.cruiser.notify.TurnSource`) reads the
+- A notification listener (`site.casiopea.cruizer.notify.TurnSource`) reads the
   "navigating" notifications of the selected nav apps and parses turn kind,
   distance, roundabout exits, ETA and speed cameras from the text.
 - The byte-level protocol is documented in

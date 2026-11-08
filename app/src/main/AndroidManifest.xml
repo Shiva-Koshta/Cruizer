@@ -37,7 +37,7 @@
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:theme="@style/Theme.Cruiser"
+        android:theme="@style/Theme.Cruizer"
         android:enableOnBackInvokedCallback="true"
         android:allowBackup="false">
 

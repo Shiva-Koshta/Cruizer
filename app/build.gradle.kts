@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "app.cruiser"
+    namespace = "site.casiopea.cruizer"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "app.cruiser"
+        applicationId = "site.casiopea.cruizer"
         minSdk = 31
         targetSdk = 37
-        versionCode = 29
-        versionName = "0.5.1"
+        versionCode = 30
+        versionName = "0.6.0"
     }
 
     buildTypes {

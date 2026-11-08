@@ -1,0 +1,174 @@
+package site.casiopea.cruizer
+
+import site.casiopea.cruizer.notify.NavTextParser
+import site.casiopea.cruizer.notify.NavTextParser.Parsed
+import site.casiopea.cruizer.proto.TurnKind
+import java.util.Calendar
+import java.util.GregorianCalendar
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/** Fixtures are real-world notification text shapes (title\nbigText as TurnSource assembles them). */
+class NavTextParserTest {
+
+    private fun now(hour: Int, minute: Int): Calendar =
+        GregorianCalendar(2026, Calendar.NOVEMBER, 7, hour, minute)
+
+    @Test
+    fun osmandTurnLine() {
+        val p = NavTextParser.parse("OsmAnd\nTurn right in 250 m onto MG Road") as Parsed.Turn
+        assertEquals(TurnKind.RIGHT, p.update.kind)
+        assertEquals(250, p.update.distanceM)
+        assertNull(p.update.exit)
+    }
+
+    @Test
+    fun roundaboutExit() {
+        val p = NavTextParser.parse("Take the 3rd exit at the roundabout in 300 m") as Parsed.Turn
+        assertEquals(TurnKind.ROUNDABOUT, p.update.kind)
+        assertEquals(3, p.update.exit)
+        assertEquals(300, p.update.distanceM)
+    }
+
+    @Test
+    fun mapsEtaClock() {
+        val p = NavTextParser.parse(
+            "Turn right onto Hosur Road\nin 400 m · arriving at 4:10 PM",
+            now(15, 0),
+        ) as Parsed.Turn
+        assertEquals(TurnKind.RIGHT, p.update.kind)
+        assertEquals(400, p.update.distanceM)
+        // 15:00 -> 16:10 = 70 min
+        assertEquals(70 * 60, p.update.arrivalSecondsFromNow)
+    }
+
+    @Test
+    fun mapsBottomLineDistanceAndTime() {
+        val p = NavTextParser.parse("Turn left onto Ring Road\n24 min · 31 km", now(10, 0)) as Parsed.Turn
+        assertEquals(TurnKind.LEFT, p.update.kind)
+        assertEquals(24 * 60, p.update.remainingSeconds)
+        assertEquals(31_000, p.update.routeRemainingM)
+    }
+
+    @Test
+    fun mapsBottomLineMiles() {
+        val p = NavTextParser.parse("Turn left\n20 mins · 5.2 mi") as Parsed.Turn
+        assertEquals(8369, p.update.routeRemainingM) // 5.2 * 1609.34
+    }
+
+    @Test
+    fun mapsBottomLineFeetAndMeters() {
+        val p = NavTextParser.parse("Continue straight\n24 min · 1500 ft") as Parsed.Turn
+        assertEquals(457, p.update.routeRemainingM) // 1500 * 0.3048
+        val q = NavTextParser.parse("Continue straight\n24 min · 800 m") as Parsed.Turn
+        assertEquals(800, q.update.routeRemainingM)
+    }
+
+    @Test
+    fun mapsStandaloneMinutes() {
+        val p = NavTextParser.parse("Continue straight\n24 min") as Parsed.Turn
+        assertEquals(24 * 60, p.update.remainingSeconds)
+    }
+
+    @Test
+    fun guidingToIsIdle() {
+        assertEquals(Parsed.Idle, NavTextParser.parse("Google Maps\nGuiding to Kazhakootam"))
+    }
+
+    @Test
+    fun startingNavigationIsIdle() {
+        assertEquals(Parsed.Idle, NavTextParser.parse("Starting navigation…"))
+    }
+
+    @Test
+    fun arrived() {
+        val p = NavTextParser.parse("You have arrived at your destination") as Parsed.Turn
+        assertEquals(TurnKind.DESTINATION, p.update.kind)
+        assertTrue(p.update.ended)
+    }
+
+    @Test
+    fun camera() {
+        val p = NavTextParser.parse("Speed camera in 120 m") as Parsed.Camera
+        assertEquals(120, p.meters)
+    }
+
+    @Test
+    fun cameraFarIsNotReported() {
+        val p = NavTextParser.parse("Speed camera in 2 km") as Parsed.Camera
+        assertNull(p.meters)
+    }
+
+    @Test
+    fun secondInlineDistanceIsNotRouteRemaining() {
+        // "then turn right in 1.2 km" is the NEXT maneuver, not the distance to the destination.
+        val p = NavTextParser.parse("Turn left in 300 m, then turn right in 1.2 km") as Parsed.Turn
+        assertEquals(300, p.update.distanceM)
+        assertNull(p.update.routeRemainingM)
+    }
+
+    @Test
+    fun nonBreakingSpaceInDistance() {
+        // Android notifications frequently format distances using non-breaking space (0xA0).
+        val p = NavTextParser.parse("Turn right in 350\u00A0m onto Main Street") as Parsed.Turn
+        assertEquals(TurnKind.RIGHT, p.update.kind)
+        assertEquals(350, p.update.distanceM)
+    }
+
+    @Test
+    fun metersOfHandlesUnicodeSpaces() {
+        assertEquals(1200, NavTextParser.metersOf("1.2\u00A0km"))
+        assertEquals(500, NavTextParser.metersOf("500\u202Fm"))
+    }
+
+    @Test
+    fun unknownDirectionWhenNoManeuverKeyword() {
+        val p = NavTextParser.parse("Main Street in 400 m") as Parsed.Turn
+        assertEquals(TurnKind.UNKNOWN, p.update.kind)
+        assertEquals(400, p.update.distanceM)
+    }
+
+    @Test
+    fun googleMapsPhrases() {
+        val right = NavTextParser.parse("Right onto Main St in 300 m") as Parsed.Turn
+        assertEquals(TurnKind.RIGHT, right.update.kind)
+        assertEquals(300, right.update.distanceM)
+
+        val left = NavTextParser.parse("Left onto 4th Ave in 150 m") as Parsed.Turn
+        assertEquals(TurnKind.LEFT, left.update.kind)
+        assertEquals(150, left.update.distanceM)
+
+        val exit = NavTextParser.parse("Take exit 14B toward Airport in 800 m") as Parsed.Turn
+        assertEquals(TurnKind.OFF_RAMP_RIGHT, exit.update.kind)
+        assertEquals(800, exit.update.distanceM)
+    }
+
+    @Test
+    fun reRouteDetected() {
+        val p = NavTextParser.parse("Recalculating route in 500 m") as Parsed.Turn
+        assertEquals(TurnKind.RE_ROUTE, p.update.kind)
+        assertEquals(500, p.update.distanceM)
+    }
+
+    @Test
+    fun googleMapsThreePartSubTextWithEta() {
+        // "13 min · 4.6 mi · 11:55 ETA" parsed at 11:00 AM -> 55 min arrival
+        val p = NavTextParser.parse("Turn left\n13 min · 4.6 mi · 11:55 ETA", now(11, 0)) as Parsed.Turn
+        assertEquals(TurnKind.LEFT, p.update.kind)
+        assertEquals(13 * 60, p.update.remainingSeconds)
+        assertEquals(7403, p.update.routeRemainingM) // 4.6 * 1609.34
+        assertEquals(55 * 60, p.update.arrivalSecondsFromNow)
+    }
+
+    @Test
+    fun googleMapsThreePartSubText24hClock() {
+        // "24 min · 12 km · 17:30" parsed at 16:30 -> 60 min arrival
+        val p = NavTextParser.parse("Turn right\n24 min · 12 km · 17:30", now(16, 30)) as Parsed.Turn
+        assertEquals(TurnKind.RIGHT, p.update.kind)
+        assertEquals(24 * 60, p.update.remainingSeconds)
+        assertEquals(12_000, p.update.routeRemainingM)
+        assertEquals(60 * 60, p.update.arrivalSecondsFromNow)
+    }
+}
