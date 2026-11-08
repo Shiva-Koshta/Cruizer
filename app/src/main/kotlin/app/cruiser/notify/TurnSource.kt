@@ -24,6 +24,12 @@ class TurnSource : NotificationListenerService() {
     }
 
     override fun onListenerConnected() {
+        if (app.cruiser.BuildConfig.DEBUG) {
+            android.util.Log.i(
+                "CruiserNav",
+                "notification listener connected (${activeNotifications.size} active)",
+            )
+        }
         // A ride may already be underway when the service restarts — surface it now.
         activeNotifications.forEach(::tryParse)
     }

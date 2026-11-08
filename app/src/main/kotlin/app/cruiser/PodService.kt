@@ -83,6 +83,7 @@ class PodService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEBUG) Log.i("CruiserNav", "service started")
         startAsForeground("Cruiser is starting…")
         Session.init(this)
         link = PodLink(this)
@@ -129,6 +130,7 @@ class PodService : Service() {
                     if (disconnectedMs > STOP_AFTER_DISCONNECTED_MS) {
                         // Pod never showed up (ignition off / forgotten) — don't
                         // burn battery scanning all day. "Connect" revives this.
+                        if (BuildConfig.DEBUG) Log.i("CruiserNav", "stopping: no Pod for 5 min")
                         stopSelf()
                         break
                     }
@@ -171,6 +173,7 @@ class PodService : Service() {
     }
 
     override fun onDestroy() {
+        if (BuildConfig.DEBUG) Log.i("CruiserNav", "service stopped")
         tickJob?.cancel()
         unregisterPhoneState()
         recorder.stopTrip()
@@ -203,6 +206,14 @@ class PodService : Service() {
             if (lastTurn == null && t != null) sentSplash = false
             lastTurn = t
             if (t != null && link.state.value == LinkState.DISCONNECTED) link.scanOrConnect(bleReady())
+            // Fire the route splash the instant nav data lands instead of waiting
+            // for the next 1 Hz tick (up to a second of dead Pod screen).
+            if (t != null && !sentSplash && link.state.value == LinkState.CONNECTED) {
+                link.send(PodProtocol.routeStartedFrame(currentNight()))
+                sentSplash = true
+                lastFrameSentAt = System.currentTimeMillis()
+                if (BuildConfig.DEBUG) Log.i("CruiserNav", "routeStarted frame sent (on turn)")
+            }
         }.launchIn(scope)
     }
 
