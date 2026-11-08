@@ -420,32 +420,16 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
                                     }
                                 }
 
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                IconButton(
+                                    onClick = { renamingPod = pod },
+                                    modifier = Modifier.size(32.dp),
                                 ) {
-                                    IconButton(
-                                        onClick = { renamingPod = pod },
-                                        modifier = Modifier.size(32.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Edit,
-                                            contentDescription = "Edit Bike",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = { context.podForget(pod.mac) },
-                                        modifier = Modifier.size(32.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Delete,
-                                            contentDescription = "Remove",
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
+                                    Icon(
+                                        Icons.Filled.Edit,
+                                        contentDescription = "Edit Bike",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp),
+                                    )
                                 }
                             }
 
@@ -566,7 +550,18 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { renamingPod = null }) { Text("Cancel") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            context.podForget(pod.mac)
+                            renamingPod = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) {
+                        Text("Delete Bike")
+                    }
+                    TextButton(onClick = { renamingPod = null }) { Text("Cancel") }
+                }
             },
         )
     }

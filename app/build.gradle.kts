@@ -11,8 +11,8 @@ android {
         applicationId = "app.cruiser"
         minSdk = 31
         targetSdk = 37
-        versionCode = 20
-        versionName = "0.4.0"
+        versionCode = 21
+        versionName = "0.4.0-liquid-glass"
     }
 
     buildTypes {

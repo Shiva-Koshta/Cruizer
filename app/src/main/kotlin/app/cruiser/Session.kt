@@ -37,6 +37,7 @@ object Session {
     private const val KEY_SAVED_PODS = "saved_pods"
     private const val KEY_LIQUID_GLASS = "liquid_glass_mode"
     private const val KEY_ACTIVE_BIKE_MAC = "active_bike_mac"
+    private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -80,6 +81,8 @@ object Session {
                     _savedPods.value = pods
                     val storedActive = p[stringPreferencesKey(KEY_ACTIVE_BIKE_MAC)]
                     activeBikeMac.value = storedActive ?: rememberedMac ?: pods.firstOrNull()?.mac
+                    val onboarded = p[booleanPreferencesKey(KEY_ONBOARDING_COMPLETED)] ?: false
+                    onboardingCompleted.value = onboarded
                 }
             }
         }
@@ -139,6 +142,7 @@ object Session {
     val settings: StateFlow<Settings> = _settings
     val isLiquidGlass = MutableStateFlow(true)
     val themeMode = MutableStateFlow(ThemeMode.SYSTEM)
+    val onboardingCompleted = MutableStateFlow(false)
 
     private val _savedPods = MutableStateFlow<List<SavedPod>>(emptyList())
     val savedPods: StateFlow<List<SavedPod>> = _savedPods
@@ -231,6 +235,15 @@ object Session {
             selectBike(mac)
         }
         persistSavedPods(updated)
+    }
+
+    fun completeOnboarding() {
+        onboardingCompleted.value = true
+        scope.launch {
+            store?.edit {
+                it[booleanPreferencesKey(KEY_ONBOARDING_COMPLETED)] = true
+            }
+        }
     }
 
     fun selectBike(mac: String) {

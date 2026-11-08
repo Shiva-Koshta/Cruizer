@@ -118,11 +118,8 @@ class MainActivity : ComponentActivity() {
                 Session.ThemeMode.SYSTEM -> isSystemInDarkTheme()
             }
             CruiserTheme(dark) {
-                val g by gate.collectAsState()
-                @Suppress("UNUSED_EXPRESSION")
-                g // permission re-checks run on every resume bump
-                val ready = isReady()
-                if (!ready) {
+                val onboarded by Session.onboardingCompleted.collectAsState()
+                if (!onboarded && !isReady()) {
                     OnboardingScreen(Modifier.fillMaxSize())
                 } else {
                     Tabs()
@@ -134,7 +131,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!isReady()) {
+        if (!Session.onboardingCompleted.value && !isReady()) {
             gate.value = gate.value + 1 // permission state may have changed off-screen
         }
         app.cruiser.notify.TurnSource.rebind(this)
@@ -145,7 +142,6 @@ class MainActivity : ComponentActivity() {
         has(Manifest.permission.BLUETOOTH_CONNECT) &&
             has(Manifest.permission.BLUETOOTH_SCAN) &&
             has(Manifest.permission.ACCESS_FINE_LOCATION) &&
-            btEnabled(this) &&
             listenerGranted(this)
 
     private fun has(p: String): Boolean =
