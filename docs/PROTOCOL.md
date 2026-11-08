@@ -39,8 +39,8 @@ Every frame is **20 bytes**. CRC-16/CCITT-FALSE over bytes `[0..17]`
 
 1. Connect → discover services → subscribe (CCCD) → start writer thread.
 2. Send `HANDSHAKE` `[0x21]`: `[1] = 0x01` **new device** (Pod shows a PIN on screen)
-   or `0x1 = 0x00` **already paired** (resume) — **Confirmed** (CRCs: resume =
-   `50 A7`, new = `40 45`, per wazetripper, byte 18/19 big-endian).
+   or `0x1 = 0x00` **already paired** (resume) — **Confirmed** (CRCs: new = `50 A7`,
+   resume = `40 45`, per wazetripper, byte 18/19 big-endian).
 3. New device: user types the **6-digit PIN** on the phone; the phone sends
    `[0x20, 'p','i','n', ...]` (6 ASCII chars, exactly 6 per RE's UI) — **Confirmed**.
 4. The Pod replies `[0x20 0x01 ...]`:

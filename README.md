@@ -22,13 +22,14 @@ No cloud, no account, no Royal Enfield code.
 ## Status
 
 First working ride target: connect, pair (PIN), navigate with OsmAnd-style
-notifications, call overlay, radar (best effort). Settings: night mode
-(day/night/auto by sunrise–sunset), bottom-line content, 12/24 h clock,
-metric/imperial. Debug builds add a **frame playground** screen.
+notifications or CoMaps' structured provider, call overlay (optional
+`READ_PHONE_STATE`), radar (best effort). Settings: night mode (day/night/auto
+by sunrise–sunset), bottom-line content, 12/24 h clock, metric/imperial. The
+Trips tab records a ride (GPX track + distance) and exports it to Downloads.
+Debug builds add a **frame playground** screen.
 
-Phase 2 (planned): trip stats, manual fill-up fuel log with GPX export,
-possible OsmAnd/CoMaps fork for a structured TBT feed if notification text
-proves too coarse.
+Planned: manual fill-up fuel log; possible OsmAnd fork for a structured TBT
+feed if notification text proves too coarse.
 
 ## Building
 

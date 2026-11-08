@@ -100,4 +100,12 @@ class NavTextParserTest {
         val p = NavTextParser.parse("Speed camera in 2 km") as Parsed.Camera
         assertNull(p.meters)
     }
+
+    @Test
+    fun secondInlineDistanceIsNotRouteRemaining() {
+        // "then turn right in 1.2 km" is the NEXT maneuver, not the distance to the destination.
+        val p = NavTextParser.parse("Turn left in 300 m, then turn right in 1.2 km") as Parsed.Turn
+        assertEquals(300, p.update.distanceM)
+        assertNull(p.update.routeRemainingM)
+    }
 }

@@ -1,5 +1,6 @@
 package app.cruiser.ble
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -19,6 +20,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -57,15 +59,21 @@ class PodLink(private val context: Context) {
     /** Raw command received from the Pod (server write or client notification). */
     var onCommand: ((ByteArray) -> Unit)? = null
 
-    private var client: BluetoothGatt? = null
+    @Volatile private var client: BluetoothGatt? = null
     private var server: BluetoothGattServer? = null
-    private var char: BluetoothGattCharacteristic? = null
+    @Volatile private var char: BluetoothGattCharacteristic? = null
     private var scanCallback: ScanCallback? = null
+    private var connectStartedAt = 0L
 
     private val scanner get() = adapter.bluetoothLeScanner
 
     private val clientCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+            // Stale callbacks from a client we already dropped must not touch state.
+            if (client !== g) {
+                g.close()
+                return
+            }
             when (newState) {
                 BluetoothGatt.STATE_CONNECTED -> {
                     _state.value = LinkState.CONNECTING
@@ -73,20 +81,25 @@ class PodLink(private val context: Context) {
                 }
                 BluetoothGatt.STATE_DISCONNECTED -> {
                     _state.value = LinkState.DISCONNECTED
+                    client = null
                     char = null
                     g.close()
-                    client = null
                 }
             }
         }
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-            val svc = g.services.firstOrNull { it.uuid == serviceUuid.uuid } ?: return
-            val c = svc.characteristics.firstOrNull { it.uuid == charUuid } ?: return
+            if (client !== g) return
+            val svc = g.services.firstOrNull { it.uuid == serviceUuid.uuid }
+            val c = svc?.characteristics?.firstOrNull { it.uuid == charUuid }
+            if (c == null) {
+                disconnect() // wrong device or a partial discovery; retry cleanly
+                return
+            }
             // Try notifications (RE does) — if the Pod never notifies, the mirror
             // server path still delivers its replies.
             g.setCharacteristicNotification(c, true)
-            c.descriptors.firstOrNull()?.let { d ->
+            c.getDescriptor(cccd)?.let { d ->
                 g.writeDescriptor(d, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
             }
             char = c
@@ -95,12 +108,14 @@ class PodLink(private val context: Context) {
         }
 
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
+            if (client !== g) return
             drain()
         }
 
         // Legacy signature covers API 31/32 when running on newer compile SDK.
         @Deprecated("deprecated in Java")
         override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
+            if (client !== g) return
             val v = c.value ?: return
             onCommand?.invoke(v)
         }
@@ -136,8 +151,7 @@ class PodLink(private val context: Context) {
 
     private fun startScan() {
         if (scanCallback != null) return
-        _state.value = LinkState.SCANNING
-        scanCallback = object : ScanCallback() {
+        val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 stopScan()
                 deviceAddress.value = result.device.address
@@ -149,11 +163,19 @@ class PodLink(private val context: Context) {
             .setNumOfMatches(1)
             .build()
         val filters = listOf(ScanFilter.Builder().setServiceUuid(serviceUuid).build())
-        scanner?.startScan(filters, settings, scanCallback)
+        val s = scanner ?: return
+        scanCallback = cb
+        _state.value = LinkState.SCANNING
+        try {
+            s.startScan(filters, settings, cb)
+        } catch (_: SecurityException) {
+            scanCallback = null
+            _state.value = LinkState.NO_PERMISSIONS
+        }
     }
 
     fun stopScan() {
-        scanCallback?.let { scanner?.stopScan(it) }
+        scanCallback?.let { cb -> runCatching { scanner?.stopScan(cb) } }
         scanCallback = null
     }
 
@@ -162,9 +184,13 @@ class PodLink(private val context: Context) {
             _state.value = if (!adapter.isEnabled) LinkState.BT_OFF else LinkState.NO_PERMISSIONS
             return
         }
-        stopScan()
+        // Ignore retries while a fresh attempt is in flight; one that never
+        // called back (>10 s) is retried instead of leaving a stuck spinner.
+        val now = System.currentTimeMillis()
+        if (_state.value == LinkState.CONNECTING && now - connectStartedAt < 10_000) return
+        connectStartedAt = now
         _state.value = LinkState.CONNECTING
-        closeAndReset()
+        reset()
         deviceAddress.value = address
         client = adapter.getRemoteDevice(address)
             .connectGatt(context, false, clientCallback, BluetoothDevice.TRANSPORT_LE)
@@ -172,10 +198,19 @@ class PodLink(private val context: Context) {
 
     fun openServer() {
         if (server != null) return
-        server = mgr.openGattServer(context, serverCallback)?.apply {
-            val svc = BluetoothGattService(serviceUuid.uuid, BluetoothGattService.SERVICE_TYPE_PRIMARY)
-            svc.addCharacteristic(BluetoothGattCharacteristic(charUuid, 5, 16)) // READ|WRITE, perm WRITE
-            addService(svc)
+        if (context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
+        try {
+            server = mgr.openGattServer(context, serverCallback)?.apply {
+                val svc =
+                    BluetoothGattService(serviceUuid.uuid, BluetoothGattService.SERVICE_TYPE_PRIMARY)
+                // READ|WRITE, permission WRITE (the Pod writes its replies here).
+                svc.addCharacteristic(BluetoothGattCharacteristic(charUuid, 5, 16))
+                addService(svc)
+            }
+        } catch (_: SecurityException) {
+            server = null
         }
     }
 
@@ -190,20 +225,19 @@ class PodLink(private val context: Context) {
      * link) without our knowing — watch the adapter, mark the state, and reopen
      * the mirror server automatically so the Pod's reply channel comes back.
      */
-    private var wantsServer = false
     private val stateWatch = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
             when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)) {
                 BluetoothAdapter.STATE_OFF -> {
-                    wantsServer = server != null
                     server = null // system closed it
-                    closeAndReset()
+                    reset()
                     _state.value = LinkState.BT_OFF
-                    if (wantsServer) Log.i("CruiserNav", "BT off — link dropped, will reopen server")
+                    Log.i("CruiserNav", "BT off — link dropped")
                 }
                 BluetoothAdapter.STATE_ON -> {
-                    if (wantsServer) openServer()
+                    // Idempotent, and needed even when the service started with BT off.
+                    openServer()
                     Log.i("CruiserNav", "BT on — server reopened=${server != null}")
                 }
             }
@@ -227,6 +261,7 @@ class PodLink(private val context: Context) {
         drain()
     }
 
+    @Synchronized
     private fun drain() {
         val c = char ?: return
         // Peek so a BT-down window can't consume the frame from the queue.
@@ -240,13 +275,15 @@ class PodLink(private val context: Context) {
     }
 
     fun disconnect() {
-        client?.disconnect()
-        client?.close()
-        closeAndReset()
+        reset()
         _state.value = LinkState.DISCONNECTED
     }
 
-    private fun closeAndReset() {
+    /** One cleanup for every exit: stop the scan, drop the client, clear pending frames. */
+    @Synchronized
+    private fun reset() {
+        stopScan()
+        client?.let { runCatching { it.disconnect(); it.close() } }
         client = null
         char = null
         queue.clear()

@@ -15,11 +15,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -121,7 +122,11 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Tabs(modifier: Modifier = Modifier) {
         val current by page.collectAsState()
-        Scaffold(modifier = modifier, bottomBar = {
+        Scaffold(
+            modifier = modifier,
+            // The one owner of system-bar insets: every tab gets `pad` from here.
+            contentWindowInsets = WindowInsets.safeDrawing,
+            bottomBar = {
             NavigationBar {
                 listOf(
                     Page.POD to "Pod",
@@ -149,8 +154,7 @@ class MainActivity : ComponentActivity() {
             Column(
                 Modifier
                     .fillMaxSize()
-                    .padding(pad)
-                    .windowInsetsPadding(safeDrawingInsets()),
+                    .padding(pad),
             ) {
                 when (current) {
                     Page.POD -> PodScreen()

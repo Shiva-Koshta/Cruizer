@@ -157,4 +157,21 @@ class PodProtocolTest {
         assertEquals(3, tenMiles[1])
         assertEquals(99, tenMiles[0]) // 10 mi x10, truncated
     }
+
+    @Test
+    fun `bottom none blanks the line instead of showing 0 m`() {
+        val f = PodProtocol.navFrame(
+            maneuver = Icons.STRAIGHT.code,
+            distanceM = 300,
+            imperial = false,
+            next = null,
+            nextDistanceM = null,
+            bottom = PodProtocol.Bottom.None,
+            night = false,
+        )
+        assertEquals(0xFF, f[11].toInt() and 0xFF)
+        assertEquals(0xFF, f[12].toInt() and 0xFF)
+        assertEquals(0xFF, f[13].toInt() and 0xFF)
+        assertEquals(crcOf(f), PodProtocol.crc16(f.copyOfRange(0, 18)))
+    }
 }

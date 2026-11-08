@@ -18,7 +18,6 @@ data class Trip(
     val distanceM: Int,
 ) {
     val seconds: Int get() = ((endedAt - id) / 1000).toInt()
-    val gpxName: String get() = "cruiser-trip-$id.gpx"
 }
 
 /**
@@ -30,41 +29,57 @@ object TripStore {
     private fun dir(context: Context) = File(context.filesDir, "trips").apply { mkdirs() }
     private fun index(context: Context) = File(dir(context), "index.json")
 
+    /** One file name format for the writer and the export. */
+    fun gpxFile(context: Context, id: Long): File = File(dir(context), "cruiser-trip-$id.gpx")
+
+    /** A truncated index must not brick the Trips tab. */
+    private fun readIndex(context: Context): JSONArray {
+        val f = index(context)
+        if (!f.exists()) return JSONArray()
+        return runCatching { JSONArray(f.readText()) }.getOrElse { JSONArray() }
+    }
+
     fun save(context: Context, trip: Trip) {
-        val arr = if (index(context).exists()) JSONArray(index(context).readText()) else JSONArray()
-        // one entry per ride id
-        val kept = (0 until arr.length()).filterNot { arr.getJSONObject(it).optLong("id") == trip.id }
+        val arr = readIndex(context)
         val next = JSONArray()
-        kept.forEach { next.put(arr.getJSONObject(it)) }
+        (0 until arr.length())
+            .mapNotNull { arr.optJSONObject(it) }
+            .filterNot { it.optLong("id") == trip.id } // one entry per ride id
+            .forEach { next.put(it) }
         next.put(
             JSONObject()
                 .put("id", trip.id)
                 .put("endedAt", trip.endedAt)
                 .put("distanceM", trip.distanceM)
         )
-        index(context).writeText(next.toString())
+        // Write-then-rename: a kill mid-write must not leave an empty index.
+        val f = index(context)
+        val tmp = File(f.parentFile, "${f.name}.tmp")
+        tmp.writeText(next.toString())
+        if (!tmp.renameTo(f)) {
+            f.writeText(next.toString())
+            tmp.delete()
+        }
     }
 
     fun history(context: Context): List<Trip> {
-        if (!index(context).exists()) return emptyList()
-        val arr = JSONArray(index(context).readText())
+        val arr = readIndex(context)
         return (0 until arr.length())
-            .map { arr.getJSONObject(it) }
-            .map { Trip(it.getLong("id"), it.getLong("endedAt"), it.getInt("distanceM")) }
+            .mapNotNull { i ->
+                arr.optJSONObject(i)?.takeIf { it.has("id") }?.let {
+                    Trip(it.optLong("id"), it.optLong("endedAt"), it.optInt("distanceM"))
+                }
+            }
             .sortedByDescending { it.id }
     }
 
-    fun gpxFile(context: Context, trip: Trip): File = File(dir(context), trip.gpxName)
-
-    fun gpxFile(context: Context, id: Long): File = File(dir(context), "cruiser-trip-$id.gpx")
-
     /** Copies a trip's GPX to Downloads; returns the display name or null on failure. */
     fun export(context: Context, trip: Trip): String? {
-        val src = gpxFile(context, trip)
+        val src = gpxFile(context, trip.id)
         if (!src.exists()) return null
         return try {
             val values = ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, trip.gpxName)
+                put(MediaStore.Downloads.DISPLAY_NAME, src.name)
                 put(MediaStore.Downloads.MIME_TYPE, "application/gpx+xml")
             }
             val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
@@ -72,7 +87,7 @@ object TripStore {
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 src.inputStream().use { it.copyTo(out) }
             } ?: return null
-            trip.gpxName
+            src.name
         } catch (_: Exception) {
             null
         }

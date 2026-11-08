@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -67,7 +68,7 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxSize()
-        .windowInsetsPadding(safeDrawingInsets())
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -112,6 +113,17 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
                     )
                 },
             ) { Text(if (location) "Granted" else "Grant") }
+        }
+
+        val phone = context.has(Manifest.permission.READ_PHONE_STATE)
+        StepCard(
+            title = "Call overlay (optional — shows incoming calls on the Pod)",
+            granted = phone,
+        ) {
+            OutlinedButton(
+                enabled = !phone,
+                onClick = { permLauncher.launch(arrayOf(Manifest.permission.READ_PHONE_STATE)) },
+            ) { Text(if (phone) "Granted" else "Allow") }
         }
 
         StepCard(title = "Bluetooth on", granted = btOn) {

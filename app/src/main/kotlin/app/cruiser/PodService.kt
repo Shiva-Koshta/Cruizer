@@ -10,10 +10,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
 import android.location.LocationListener
 import android.location.LocationManager
-import android.os.Binder
-import android.os.Build
 import android.os.IBinder
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
@@ -61,25 +60,18 @@ class PodService : Service() {
         private const val STOP_AFTER_DISCONNECTED_MS = 5 * 60 * 1000L
     }
 
-    inner class LocalBinder : Binder() {
-        val service: PodService get() = this@PodService
-    }
-
-    private val binder = LocalBinder()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var link: PodLink
     private var tickJob: Job? = null
     private var telephonyCallback: TelephonyCallback? = null
     private lateinit var recorder: TripRecorder
 
-    var awaitingPin = false
-        private set
-
     private var lastFrameSentAt = 0L
     private var lastTurn: TurnUpdate? = null
     private var sentSplash = false
 
-    override fun onBind(intent: Intent?): IBinder = binder
+    /** No binding: the UI talks to the service through [Session] only. */
+    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -109,10 +101,14 @@ class PodService : Service() {
                     true -> {
                         recorder.startListening()
                         recorder.startTrip(System.currentTimeMillis())
+                        // Trip active: include the location FGS type so GPS keeps
+                        // flowing with the screen off.
+                        updateForeground(link.state.value)
                     }
                     false -> {
                         recorder.stopTrip()
                         recorder.stopListening()
+                        updateForeground(link.state.value)
                     }
                 }
                 Session.tripCommand.value = null
@@ -127,7 +123,8 @@ class PodService : Service() {
             while (isActive) {
                 if (link.state.value != LinkState.CONNECTED) {
                     disconnectedMs += CONNECT_PAUSE_MS
-                    if (disconnectedMs > STOP_AFTER_DISCONNECTED_MS) {
+                    // A ride being recorded needs the service even without a Pod.
+                    if (Session.trip.value == null && disconnectedMs > STOP_AFTER_DISCONNECTED_MS) {
                         // Pod never showed up (ignition off / forgotten) — don't
                         // burn battery scanning all day. "Connect" revives this.
                         if (BuildConfig.DEBUG) Log.i("CruiserNav", "stopping: no Pod for 5 min")
@@ -178,10 +175,14 @@ class PodService : Service() {
         unregisterPhoneState()
         recorder.stopTrip()
         recorder.stopListening()
-        if (bleReady()) link.disconnect()
+        link.disconnect()
         link.closeServer()
         link.unwatchAdapterState()
         ComapsSource.stop(this)
+        // The state collector is cancelled below; mirror the final state directly
+        // so the UI never keeps a dead "Connected" screen.
+        Session.linkState.value = LinkState.DISCONNECTED
+        Session.awaitingPin.value = false
         scope.cancel()
         super.onDestroy()
     }
@@ -242,10 +243,6 @@ class PodService : Service() {
         // 0x03 = Pod firmware/version, 0x30 = serial — not needed for driving frames.
     }
 
-    fun submitPin(pin: String) {
-        if (pin.length == 6) link.send(PodProtocol.pinFrame(pin))
-    }
-
     private fun sendSetTime() {
         val cal = java.util.Calendar.getInstance()
         link.send(
@@ -277,9 +274,10 @@ class PodService : Service() {
     }
 
     private fun awaitPin(on: Boolean) {
-        if (awaitingPin == on) return
+        // Compare the flow, not a second copy: the dialog's Cancel clears it
+        // directly, and a later handshake must be able to show it again.
+        if (Session.awaitingPin.value == on) return
         Session.awaitingPin.value = on
-        awaitingPin = on
         updateForeground(link.state.value)
     }
 
@@ -338,7 +336,7 @@ class PodService : Service() {
                 ?.let { PodProtocol.Bottom.Remaining(it) }
             Session.BottomMode.TOTAL -> turn.routeRemainingM
                 ?.let { PodProtocol.Bottom.Total(it, s.imperial) }
-        } ?: PodProtocol.Bottom.Total(turn.routeRemainingM ?: 0, s.imperial)
+        } ?: PodProtocol.Bottom.None
         val f = PodProtocol.navFrame(
             maneuver = maneuver,
             distanceM = turn.distanceM ?: 0,
@@ -453,9 +451,13 @@ class PodService : Service() {
                 )
             )
             .build()
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(NOTIF_ID, n, FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
-        } else startForeground(NOTIF_ID, n)
+        // A trip needs the location type, but only while the permission is held:
+        // startForeground throws without it on Android 14+.
+        val withLocation = Session.trip.value != null &&
+            hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)
+        val type = FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+            (if (withLocation) FOREGROUND_SERVICE_TYPE_LOCATION else 0)
+        startForeground(NOTIF_ID, n, type)
     }
 
     private fun updateForeground(state: LinkState) {
@@ -467,7 +469,7 @@ class PodService : Service() {
                 LinkState.BT_OFF -> "Bluetooth is off — turn it on"
                 LinkState.NO_PERMISSIONS -> "Bluetooth permission required"
                 LinkState.DISCONNECTED ->
-                    if (awaitingPin) "Enter the PIN shown on the Tripper Pod"
+                    if (Session.awaitingPin.value) "Enter the PIN shown on the Tripper Pod"
                     else "Tripper Pod disconnected — waiting for ignition"
             }
         )

@@ -25,13 +25,12 @@ class TripRecorder(private val context: Context) : LocationListener {
         Session.lastLon = location.longitude
         val trip = Session.trip.value ?: return
         gpx?.point(location.latitude, location.longitude, location.time)
-        trip.lastLoc?.let { prev ->
-            val delta = prev.distanceTo(location)
-            // Discard absurd jumps (GPS glitches) and in-place jitter.
-            if (delta in 0.3f..150f) {
-                Session.updateTrip(distanceM = trip.distanceM + delta.roundToInt().toInt(), lastLoc = location)
-            }
-        }
+        val prev = trip.lastLoc
+        val delta = prev?.distanceTo(location) ?: 0f
+        // Discard absurd jumps (GPS glitches) and in-place jitter — but always
+        // re-anchor below, or one glitch freezes the distance for the whole ride.
+        val add = if (prev != null && delta in 0.3f..150f) delta.roundToInt() else 0
+        Session.updateTrip(distanceM = trip.distanceM + add, lastLoc = location)
     }
 
     @Deprecated("kept for platform consistency")
@@ -64,18 +63,22 @@ class TripRecorder(private val context: Context) : LocationListener {
         val trip = Session.trip.value ?: return
         val file = gpx
         gpx = null
-        // Slow-disk writes (GPX footer + DB save) off the main thread.
+        // Slow-disk writes (GPX footer + index) off the main thread.
         persist.execute {
-            file?.close()
-            TripStore.save(
-                context,
-                Trip(
-                    id = trip.startedAt,
-                    endedAt = System.currentTimeMillis(),
-                    distanceM = trip.distanceM,
-                ),
-            )
-            Session.endTrip()
+            try {
+                file?.close()
+                TripStore.save(
+                    context,
+                    Trip(
+                        id = trip.startedAt,
+                        endedAt = System.currentTimeMillis(),
+                        distanceM = trip.distanceM,
+                    ),
+                )
+            } finally {
+                // Even a disk error must not leave the UI stuck on "Recording…".
+                Session.endTrip()
+            }
         }
     }
 

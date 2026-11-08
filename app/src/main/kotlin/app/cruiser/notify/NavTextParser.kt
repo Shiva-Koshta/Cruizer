@@ -102,7 +102,7 @@ object NavTextParser {
     }
 
     private fun build(lower: String, now: Calendar): TurnUpdate {
-        val distances = DISTANCE.findAll(lower).take(2).toList().mapNotNull(::toMeters)
+        val distance = DISTANCE.find(lower)?.let(::toMeters)
         val exit = EXIT.find(lower)?.groupValues
             ?.let { g -> (g[1].ifEmpty { g[2] }).toIntOrNull() }
             ?.takeIf { it in 1..9 }
@@ -110,17 +110,18 @@ object NavTextParser {
         val kind = kindOf(lower)
         return TurnUpdate(
             kind = kind,
-            distanceM = distances.firstOrNull(),
+            distanceM = distance,
             exit = exit,
             // Notification text rarely names the next-next maneuver; the small arrow stays blank.
             next = null,
             nextDistanceM = null,
             arrivalSecondsFromNow = etaSeconds(lower, now),
-            // distance-to-destination: from the Maps bottom line, else the 2nd inline distance.
-            routeRemainingM = mapsBottom?.let(::bottomRemaining) ?: distances.getOrNull(1),
+            // Distance to destination only from the Maps bottom line: a second inline
+            // distance is the *next* maneuver, not the route remaining.
+            routeRemainingM = mapsBottom?.let(::bottomRemaining),
             remainingSeconds = remainingSeconds(lower)
                 ?: mapsBottom?.groupValues?.get(1)?.toIntOrNull()?.times(60),
-            ended = kind == TurnKind.DESTINATION && distances.firstOrNull() == null,
+            ended = kind == TurnKind.DESTINATION && distance == null,
         )
     }
 

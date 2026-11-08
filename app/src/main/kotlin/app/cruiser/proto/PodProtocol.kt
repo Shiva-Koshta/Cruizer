@@ -113,6 +113,9 @@ object PodProtocol {
         data class Arrival(val secondsFromNow: Int, val is12hFormat: Boolean) : Bottom
         data class Remaining(val seconds: Int) : Bottom
         data class Total(val meters: Int, val imperial: Boolean) : Bottom
+
+        /** No data for the selected mode: blank the line rather than showing a false "0 m". */
+        data object None : Bottom
     }
 
     /**
@@ -185,7 +188,7 @@ object PodProtocol {
                 p[12] = (v and 0xFF).toByte()
                 p[13] = u.toByte() // distance mode: any non-zero [13]
             }
-            else -> {
+            Bottom.None -> {
                 p[11] = 0xFF.toByte(); p[12] = 0xFF.toByte(); p[13] = 0xFF.toByte()
             }
         }

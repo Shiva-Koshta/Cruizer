@@ -22,14 +22,17 @@ object SunPhase {
         // Hour angle for sunrise/sunset, zenith 90.83 deg (accounts for refraction).
         val cosH = (kotlin.math.cos(90.83 * rad) - kotlin.math.sin(latR) * kotlin.math.sin(decl)) /
             (kotlin.math.cos(latR) * kotlin.math.cos(decl))
-        // Polar day/night: the sun never crosses the horizon in the direction guessed.
-        if (cosH > 1) return true // midnight sun has set: full-night day
-        if (cosH < -1) return false // midnight sun is up: full-day day
+        // Polar day/night: the sun never crosses the horizon.
+        if (cosH > 1) return true // polar night: sun never rises
+        if (cosH < -1) return false // midnight sun: sun never sets
 
-        val hourAngleDeg = kotlin.math.acos(cosH) / rad * 15
-        val dayLengthMin = 4 * hourAngleDeg
-        // Solar noon in local minutes; lon is positive east, local noon = 720 - 4*lon(local offset).
-        val solarNoonMin = 720 - 4 * lon + cal.get(java.util.Calendar.DST_OFFSET) / 60000
+        // Day length in minutes: 2 * acos(cosH) hours, and 1 hour = 15 degrees.
+        val dayLengthMin = 8 * kotlin.math.acos(cosH) / rad
+        // Solar noon in local minutes: UTC noon minus 4 min per degree of longitude,
+        // then shifted into the phone's zone (raw offset + DST).
+        val zoneMin = (cal.get(java.util.Calendar.ZONE_OFFSET) +
+            cal.get(java.util.Calendar.DST_OFFSET)) / 60000
+        val solarNoonMin = 720 - 4 * lon + zoneMin
         val sunriseMin = solarNoonMin - dayLengthMin / 2
         val sunsetMin = solarNoonMin + dayLengthMin / 2
         val minutesOfDay =

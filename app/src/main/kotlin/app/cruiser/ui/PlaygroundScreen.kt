@@ -104,6 +104,7 @@ fun PlaygroundScreen(onBack: () -> Unit) {
             nextDistanceM = null,
             bottom = bottom,
             night = night,
+            exit = exit,
         )
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
