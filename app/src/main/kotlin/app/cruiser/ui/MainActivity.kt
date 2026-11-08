@@ -158,23 +158,20 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Tabs(modifier: Modifier = Modifier) {
         val s by Session.settings.collectAsState()
-        val pagerState = rememberPagerState(initialPage = 0) { 2 } // 0 = Bike (Home), 1 = Settings
-        val scope = rememberCoroutineScope()
-        var inPlayground by remember { mutableStateOf(false) }
-
+        var current by remember { mutableStateOf(Page.POD) }
         var backProgress by remember { mutableFloatStateOf(0f) }
-        val isBackEnabled = inPlayground || pagerState.currentPage != 0
+        val density = androidx.compose.ui.platform.LocalDensity.current
 
-        // True Android 14/15 Predictive Back Gesture (tracks swipe progress)
-        PredictiveBackHandler(enabled = isBackEnabled) { progress: Flow<BackEventCompat> ->
+        // True layered Predictive Back: Playground -> Settings -> Home -> System Exit
+        PredictiveBackHandler(enabled = current != Page.POD) { progress: Flow<BackEventCompat> ->
             try {
                 progress.collect { backEvent ->
                     backProgress = backEvent.progress
                 }
-                if (inPlayground) {
-                    inPlayground = false
-                } else if (pagerState.currentPage != 0) {
-                    scope.launch { pagerState.animateScrollToPage(0) }
+                when (current) {
+                    Page.PLAYGROUND -> current = Page.SETTINGS
+                    Page.SETTINGS -> current = Page.POD
+                    Page.POD -> {}
                 }
             } catch (_: CancellationException) {
             } finally {
@@ -182,37 +179,54 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        val backScale = 1f - (backProgress * 0.08f)
-        val backCorner = (backProgress * 28f).dp
-
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .graphicsLayer {
-                    scaleX = backScale
-                    scaleY = backScale
-                    clip = backProgress > 0f
-                    shape = RoundedCornerShape(backCorner)
-                },
+                .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
-            if (inPlayground) {
-                PlaygroundScreen(onBack = { inPlayground = false })
-            } else {
-                HorizontalPager(
-                    state = pagerState,
-                    beyondViewportPageCount = 1,
-                    modifier = Modifier.fillMaxSize(),
-                ) { pageIndex ->
-                    when (pageIndex) {
-                        0 -> PodScreen()
-                        1 -> SettingsScreen(onPlayground = { inPlayground = true })
+            // Layer 1: Screen underneath (revealed expanding during edge swipe)
+            if (backProgress > 0f) {
+                val underScale = 0.94f + (backProgress * 0.06f)
+                val underAlpha = 0.60f + (backProgress * 0.40f)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = underScale
+                            scaleY = underScale
+                            alpha = underAlpha
+                        },
+                ) {
+                    when (current) {
+                        Page.PLAYGROUND -> SettingsScreen(onPlayground = {})
+                        Page.SETTINGS -> PodScreen()
+                        Page.POD -> {}
                     }
                 }
             }
 
+            // Layer 2: Active / Top Screen (slides to the right tracking finger)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        if (backProgress > 0f) {
+                            translationX = backProgress * size.width
+                            clip = true
+                            shape = RoundedCornerShape((backProgress * 28f).dp)
+                            shadowElevation = backProgress * with(density) { 16.dp.toPx() }
+                        }
+                    },
+            ) {
+                when (current) {
+                    Page.POD -> PodScreen()
+                    Page.SETTINGS -> SettingsScreen(onPlayground = { current = Page.PLAYGROUND })
+                    Page.PLAYGROUND -> PlaygroundScreen(onBack = { current = Page.SETTINGS })
+                }
+            }
+
             // Truly Floating Capsule Pill Bar (Transparent surround, shadow + tonal elevation)
-            if (!inPlayground) {
+            if (current != Page.PLAYGROUND && backProgress == 0f) {
                 Surface(
                     shape = CircleShape,
                     color = if (s.liquidGlass) Color.Transparent
@@ -234,11 +248,11 @@ class MainActivity : ComponentActivity() {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         listOf(
-                            0 to ("Bike" to Icons.Filled.Home),
-                            1 to ("Settings" to Icons.Filled.Settings),
-                        ).forEach { (index, pair) ->
+                            Page.POD to ("Bike" to Icons.Filled.Home),
+                            Page.SETTINGS to ("Settings" to Icons.Filled.Settings),
+                        ).forEach { (p, pair) ->
                             val (label, icon) = pair
-                            val isSelected = pagerState.currentPage == index
+                            val isSelected = current == p
                             Surface(
                                 shape = CircleShape,
                                 color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
@@ -248,7 +262,7 @@ class MainActivity : ComponentActivity() {
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null,
                                     ) {
-                                        scope.launch { pagerState.animateScrollToPage(index) }
+                                        current = p
                                     },
                             ) {
                                 Row(

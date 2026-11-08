@@ -60,21 +60,20 @@ fun Modifier.liquidGlass(
         )
     }
 
+    val sheenBrush = remember(dark) {
+        Brush.verticalGradient(
+            0.0f to Color.White.copy(alpha = if (dark) 0.08f else 0.14f),
+            0.30f to Color.Transparent,
+        )
+    }
+
     return this
         .clip(shape)
         .background(glassBackground)
         .border(width = borderWidth, brush = glassBorder, shape = shape)
         .drawWithContent {
             drawContent()
-            // Subtle specular lens sheen across top 25% of the glass
-            drawRect(
-                brush = Brush.verticalGradient(
-                    0.0f to Color.White.copy(alpha = if (dark) 0.08f else 0.14f),
-                    0.25f to Color.Transparent,
-                    startY = 0f,
-                    endY = size.height * 0.35f,
-                ),
-            )
+            drawRect(sheenBrush)
         }
 }
 
@@ -118,21 +117,24 @@ fun CruiserGlassCard(
         }
     }
 
-    val cardModifier = if (isGlass && glassBackground != null && glassBorder != null) {
+    val sheenBrush = remember(isGlass, dark) {
+        if (!isGlass) null
+        else {
+            Brush.verticalGradient(
+                0.0f to Color.White.copy(alpha = if (dark) 0.08f else 0.14f),
+                0.30f to Color.Transparent,
+            )
+        }
+    }
+
+    val cardModifier = if (isGlass && glassBackground != null && glassBorder != null && sheenBrush != null) {
         modifier
             .clip(shape)
             .background(glassBackground)
             .border(width = 1.dp, brush = glassBorder, shape = shape)
             .drawWithContent {
                 drawContent()
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        0.0f to Color.White.copy(alpha = if (dark) 0.08f else 0.14f),
-                        0.25f to Color.Transparent,
-                        startY = 0f,
-                        endY = size.height * 0.35f,
-                    ),
-                )
+                drawRect(sheenBrush)
             }
     } else {
         modifier

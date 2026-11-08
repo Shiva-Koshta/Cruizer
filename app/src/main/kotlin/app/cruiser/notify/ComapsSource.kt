@@ -8,6 +8,10 @@ import android.os.Looper
 import app.cruiser.Session
 import app.cruiser.proto.TurnKind
 import app.cruiser.proto.TurnUpdate
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Structured live navigation source for CoMaps (the Organic Maps fork), which
@@ -46,27 +50,33 @@ object ComapsSource {
 
     private var registered = false
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     fun start(context: Context) {
         if (registered) return
         val app = context.applicationContext
         appContext = app
-        val flavors = installed(app).filter { granted(app, it) }
-        if (flavors.isEmpty()) return
-        var ok = 0
-        flavors.forEach { pkg ->
-            try {
-                app.contentResolver.registerContentObserver(
-                    Uri.parse("content://$pkg$AUTHORITY_SUFFIX/live"),
-                    false,
-                    observer,
-                )
-                ok++
-            } catch (_: Exception) {
+        scope.launch {
+            if (registered) return@launch
+            val flavors = installed(app).filter { granted(app, it) }
+            if (flavors.isEmpty()) return@launch
+            var ok = 0
+            flavors.forEach { pkg ->
+                try {
+                    app.contentResolver.registerContentObserver(
+                        Uri.parse("content://$pkg$AUTHORITY_SUFFIX/live"),
+                        false,
+                        observer,
+                    )
+                    ok++
+                } catch (_: Exception) {
+                }
+            }
+            if (ok > 0) {
+                registered = true
+                observer.query(app) // surface a session already in progress
             }
         }
-        if (ok == 0) return // nothing registered — allow a later start() to retry
-        registered = true
-        observer.query(app) // surface a session already in progress
     }
 
     fun stop(context: Context) {
@@ -102,37 +112,39 @@ object ComapsSource {
         }
 
         fun query(ctx: Context) {
-            val pkg = installed(ctx).firstOrNull() ?: return
-            try {
-                val cursor = ctx.contentResolver.query(
-                    Uri.parse("content://$pkg$AUTHORITY_SUFFIX/live"),
-                    null, null, null, null,
-                )
-                val row = cursor?.use { c ->
-                    if (!c.moveToFirst()) null else Row(
-                        car = c.col("car_direction"),
-                        ped = c.col("pedestrian_direction"),
-                        distToTurn = c.col("dist_to_turn"),
-                        distToTarget = c.col("dist_to_target"),
-                        timeSeconds = c.intOrNull("total_time_seconds"),
-                        exitNum = c.intOrNull("exit_num"),
+            scope.launch {
+                val pkg = installed(ctx).firstOrNull() ?: return@launch
+                try {
+                    val cursor = ctx.contentResolver.query(
+                        Uri.parse("content://$pkg$AUTHORITY_SUFFIX/live"),
+                        null, null, null, null,
                     )
-                }
-                val update = row?.let { turnUpdate(it.car, it.ped, it.distToTurn, it.distToTarget, it.timeSeconds, it.exitNum) }
-                when {
-                    update != null -> {
-                        Session.postTurn(update)
-                        owned = true
+                    val row = cursor?.use { c ->
+                        if (!c.moveToFirst()) null else Row(
+                            car = c.col("car_direction"),
+                            ped = c.col("pedestrian_direction"),
+                            distToTurn = c.col("dist_to_turn"),
+                            distToTarget = c.col("dist_to_target"),
+                            timeSeconds = c.intOrNull("total_time_seconds"),
+                            exitNum = c.intOrNull("exit_num"),
+                        )
                     }
-                    owned -> {
-                        // empty cursor = navigation ended; clear only our own turn
-                        Session.postTurn(null)
-                        owned = false
+                    val update = row?.let { turnUpdate(it.car, it.ped, it.distToTurn, it.distToTarget, it.timeSeconds, it.exitNum) }
+                    when {
+                        update != null -> {
+                            Session.postTurn(update)
+                            owned = true
+                        }
+                        owned -> {
+                            // empty cursor = navigation ended; clear only our own turn
+                            Session.postTurn(null)
+                            owned = false
+                        }
                     }
+                } catch (_: SecurityException) {
+                    // rider revoked CoMaps permission mid-session; nothing to do until re-granted
+                } catch (_: Exception) {
                 }
-            } catch (_: SecurityException) {
-                // rider revoked CoMaps permission mid-session; nothing to do until re-granted
-            } catch (_: Exception) {
             }
         }
 
