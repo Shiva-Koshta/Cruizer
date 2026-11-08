@@ -110,6 +110,12 @@ object Session {
     val currentTurn: StateFlow<TurnUpdate?> = _currentTurn
 
     fun postTurn(t: TurnUpdate?) {
+        if (BuildConfig.DEBUG) {
+            Log.i(
+                "CruiserNav",
+                "turn posted: ${t?.let { "${it.kind} dist=${it.distanceM ?: "-"} arr=${it.arrivalSecondsFromNow ?: "-"}" } ?: "null"}",
+            )
+        }
         _currentTurn.value = t
     }
 

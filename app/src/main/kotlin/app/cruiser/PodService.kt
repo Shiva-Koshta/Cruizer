@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.IBinder
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import app.cruiser.ble.LinkState
 import app.cruiser.ble.PodLink
@@ -82,6 +83,7 @@ class PodService : Service() {
         startAsForeground("Cruiser is starting…")
         Session.init(this)
         link = PodLink(this)
+        link.watchAdapterState() // BT off/on cycles (GrapheneOS) kill the GATT server — track it
         // The GATT server only needs CONNECT (SCAN is for discovering new Pods).
         if (hasPerm(Manifest.permission.BLUETOOTH_CONNECT)) link.openServer()
         link.onCommand = ::onPodCommand
@@ -125,6 +127,7 @@ class PodService : Service() {
                 } else reconnectCountdown = 0
                 val now = System.currentTimeMillis()
                 if (link.state.value == LinkState.CONNECTED) tick()
+                else if (BuildConfig.DEBUG) Log.i("CruiserNav", "tick skipped: ${link.state.value}")
                 delay(CONNECT_PAUSE_MS)
             }
         }
@@ -150,6 +153,7 @@ class PodService : Service() {
         recorder.stopListening()
         if (bleReady()) link.disconnect()
         link.closeServer()
+        link.unwatchAdapterState()
         ComapsSource.stop(this)
         scope.cancel()
         super.onDestroy()
@@ -269,6 +273,7 @@ class PodService : Service() {
             link.send(PodProtocol.routeStartedFrame(night))
             sentSplash = true
             lastFrameSentAt = now
+            if (BuildConfig.DEBUG) Log.i("CruiserNav", "routeStarted frame sent")
             return
         }
         renderNavFrame(turn, night, now)
@@ -302,6 +307,7 @@ class PodService : Service() {
             exit = if (turn.exit != null) turn.exit else 0,
         )
         link.send(f)
+        if (BuildConfig.DEBUG) Log.i("CruiserNav", "nav frame: " + f.joinToString(" ") { "%02X".format(it) })
         lastFrameSentAt = now
     }
 

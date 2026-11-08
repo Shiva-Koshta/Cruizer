@@ -1,12 +1,15 @@
 package app.cruiser.ui
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -168,6 +171,9 @@ private fun PodScreen(modifier: Modifier = Modifier) {
     val state by Session.linkState.collectAsState()
     val turn by Session.currentTurn.collectAsState()
     val context = LocalContext.current
+    val enableBt = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {}
 
     Column(
         modifier = modifier
@@ -225,6 +231,14 @@ private fun PodScreen(modifier: Modifier = Modifier) {
                         else -> {
                             Button(onClick = context::podStart, enabled = false) {
                                 Text(if (state == LinkState.BT_OFF) "Bluetooth off" else "Permissions needed")
+                            }
+                            if (state == LinkState.BT_OFF) {
+                                // GrapheneOS auto-off leaves riders here; one tap fixes it.
+                                Button(
+                                    onClick = {
+                                        enableBt.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                                    },
+                                ) { Text("Turn on Bluetooth") }
                             }
                         }
                     }

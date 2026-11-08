@@ -15,8 +15,13 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.ParcelUuid
+import android.util.Log
+import androidx.core.content.ContextCompat
 import app.cruiser.proto.PodProtocol
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -180,6 +185,42 @@ class PodLink(private val context: Context) {
         server = null
     }
 
+    /**
+     * GrapheneOS-style auto-off cycles kill the GATT server (and the client
+     * link) without our knowing — watch the adapter, mark the state, and reopen
+     * the mirror server automatically so the Pod's reply channel comes back.
+     */
+    private var wantsServer = false
+    private val stateWatch = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+            when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)) {
+                BluetoothAdapter.STATE_OFF -> {
+                    wantsServer = server != null
+                    server = null // system closed it
+                    closeAndReset()
+                    _state.value = LinkState.BT_OFF
+                    if (wantsServer) Log.i("CruiserNav", "BT off — link dropped, will reopen server")
+                }
+                BluetoothAdapter.STATE_ON -> {
+                    if (wantsServer) openServer()
+                    Log.i("CruiserNav", "BT on — server reopened=${server != null}")
+                }
+            }
+        }
+    }
+
+    fun watchAdapterState() {
+        ContextCompat.registerReceiver(
+            context,
+            stateWatch,
+            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+    }
+
+    fun unwatchAdapterState() = context.unregisterReceiver(stateWatch)
+
     /** Offer a frame; written when the transport is idle. */
     fun send(bytes: ByteArray) {
         queue.offer(bytes)
@@ -193,7 +234,8 @@ class PodLink(private val context: Context) {
         @Suppress("DEPRECATION")
         c.value = b
         @Suppress("DEPRECATION")
-        client?.writeCharacteristic(c)
+        val ok = client?.writeCharacteristic(c)
+        if (ok == false) Log.i("CruiserNav", "BLE write rejected")
     }
 
     fun disconnect() {
