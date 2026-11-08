@@ -6,19 +6,14 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,9 +30,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -52,8 +49,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -61,13 +56,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -79,6 +77,7 @@ import app.cruiser.Session
 import app.cruiser.ble.LinkState
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 /** Launcher. First-run onboarding gate, then three tabs: Pod / Trips / Settings. */
 class MainActivity : ComponentActivity() {
@@ -146,33 +145,51 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Tabs(modifier: Modifier = Modifier) {
         val current by page.collectAsState()
+        val pagerState = rememberPagerState(initialPage = 0) { 2 } // 0 = POD (Bike), 1 = SETTINGS
+        val scope = rememberCoroutineScope()
+
+        // Sync pager with page state
+        LaunchedEffect(pagerState.currentPage) {
+            if (current != Page.PLAYGROUND) {
+                page.value = if (pagerState.currentPage == 0) Page.POD else Page.SETTINGS
+            }
+        }
+        LaunchedEffect(current) {
+            if (current == Page.POD && pagerState.currentPage != 0) {
+                pagerState.animateScrollToPage(0)
+            } else if (current == Page.SETTINGS && pagerState.currentPage != 1) {
+                pagerState.animateScrollToPage(1)
+            }
+        }
+
+        // BackHandler: Playground -> Settings -> Home -> Exit
+        BackHandler(enabled = current != Page.POD) {
+            when (current) {
+                Page.PLAYGROUND -> page.value = Page.SETTINGS
+                Page.SETTINGS -> {
+                    page.value = Page.POD
+                    scope.launch { pagerState.animateScrollToPage(0) }
+                }
+                Page.POD -> {}
+            }
+        }
+
         Box(
             modifier = modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
-            // Main Content Area with AnimatedContent for smooth transitions
-            AnimatedContent(
-                targetState = current,
-                transitionSpec = {
-                    (fadeIn(animationSpec = tween(220, delayMillis = 50)) +
-                        slideInHorizontally(animationSpec = tween(250)) { width -> if (targetState.ordinal > initialState.ordinal) width / 4 else -width / 4 })
-                        .togetherWith(
-                            fadeOut(animationSpec = tween(150)) +
-                                slideOutHorizontally(animationSpec = tween(200)) { width -> if (targetState.ordinal > initialState.ordinal) -width / 4 else width / 4 },
-                        )
-                },
-                label = "tab_transition",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = if (current != Page.PLAYGROUND) 80.dp else 0.dp),
-            ) { targetPage ->
-                when (targetPage) {
-                    Page.POD -> PodScreen()
-                    Page.SETTINGS -> SettingsScreen(
-                        onPlayground = { page.value = Page.PLAYGROUND },
-                    )
-                    Page.PLAYGROUND -> PlaygroundScreen(onBack = { page.value = Page.SETTINGS })
+            if (current == Page.PLAYGROUND) {
+                PlaygroundScreen(onBack = { page.value = Page.SETTINGS })
+            } else {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { pageIndex ->
+                    when (pageIndex) {
+                        0 -> PodScreen()
+                        1 -> SettingsScreen(onPlayground = { page.value = Page.PLAYGROUND })
+                    }
                 }
             }
 
@@ -182,7 +199,7 @@ class MainActivity : ComponentActivity() {
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.95f),
                     tonalElevation = 8.dp,
-                    shadowElevation = 10.dp,
+                    shadowElevation = 12.dp,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
@@ -205,7 +222,15 @@ class MainActivity : ComponentActivity() {
                             Surface(
                                 shape = CircleShape,
                                 color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                modifier = Modifier.clickable { page.value = p },
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        page.value = p
+                                        scope.launch { pagerState.animateScrollToPage(if (p == Page.POD) 0 else 1) }
+                                    },
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
@@ -386,7 +411,7 @@ private fun PodScreen(modifier: Modifier = Modifier) {
         // Multi-Pod Saved Bikes Card
         SavedPodsCard()
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(110.dp))
     }
 }
 

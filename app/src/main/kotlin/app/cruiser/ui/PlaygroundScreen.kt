@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,8 +55,18 @@ fun PlaygroundScreen(onBack: () -> Unit) {
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Filled.ArrowBack, contentDescription = "Back to Settings")
+            }
+            Text("Frame Playground", style = MaterialTheme.typography.titleLarge)
+        }
         Text("Frame playground", style = MaterialTheme.typography.headlineSmall)
 
         Text("Maneuver", style = MaterialTheme.typography.titleSmall)
@@ -124,47 +137,5 @@ fun PlaygroundScreen(onBack: () -> Unit) {
             OutlinedButton(onClick = { Session.postTurn(null) }) { Text("Clear") }
             TextButton(onClick = onBack) { Text("Back") }
         }
-
-        // Compass / Heading emulation test
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                var heading by remember { mutableStateOf(0f) }
-                val (compassKind, cardinal) = headingToDirection(heading)
-                Text("Compass / Directional Test", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Heading: ${heading.toInt()}° ($cardinal) → Pod arrow: ${compassKind.name}",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Slider(
-                    value = heading,
-                    onValueChange = { heading = it },
-                    valueRange = 0f..359f,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        Session.postTurn(TurnUpdate(compassKind, distanceM = heading.toInt()))
-                    }) {
-                        Text("Send Compass to Pod")
-                    }
-                    OutlinedButton(onClick = { Session.postTurn(null) }) {
-                        Text("Clear")
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun headingToDirection(deg: Float): Pair<TurnKind, String> {
-    val normalized = ((deg % 360f) + 360f) % 360f
-    return when {
-        normalized >= 337.5f || normalized < 22.5f -> TurnKind.STRAIGHT to "N"
-        normalized < 67.5f -> TurnKind.SLIGHT_RIGHT to "NE"
-        normalized < 112.5f -> TurnKind.RIGHT to "E"
-        normalized < 157.5f -> TurnKind.SHARP_RIGHT to "SE"
-        normalized < 202.5f -> TurnKind.U_TURN to "S"
-        normalized < 247.5f -> TurnKind.SHARP_LEFT to "SW"
-        normalized < 292.5f -> TurnKind.LEFT to "W"
-        else -> TurnKind.SLIGHT_LEFT to "NW"
     }
 }

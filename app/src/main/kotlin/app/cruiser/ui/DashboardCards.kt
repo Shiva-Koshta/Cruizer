@@ -3,6 +3,8 @@ package app.cruiser.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -416,7 +418,10 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
             onDismissRequest = { renamingPod = null },
             title = { Text("Edit Bike Profile") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     OutlinedTextField(
                         value = newName,
                         onValueChange = { newName = it },
