@@ -11,8 +11,8 @@ android {
         applicationId = "app.cruiser"
         minSdk = 31
         targetSdk = 37
-        versionCode = 28
-        versionName = "0.5.0"
+        versionCode = 29
+        versionName = "0.5.1"
     }
 
     buildTypes {

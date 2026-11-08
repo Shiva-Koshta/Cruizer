@@ -137,8 +137,10 @@ class MainActivity : ComponentActivity() {
                 Session.ThemeMode.SYSTEM -> isSystemInDarkTheme()
             }
             CruiserTheme(dark) {
-                val onboarded by Session.onboardingCompleted.collectAsState()
-                if (!onboarded && !isReady()) {
+                val g by gate.collectAsState()
+                @Suppress("UNUSED_EXPRESSION")
+                g // re-check on gate update
+                if (!isReady()) {
                     OnboardingScreen(Modifier.fillMaxSize())
                 } else {
                     Tabs()
@@ -153,9 +155,7 @@ class MainActivity : ComponentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 35) {
             window.decorView.setRequestedFrameRate(120f)
         }
-        if (!Session.onboardingCompleted.value && !isReady()) {
-            gate.value = gate.value + 1 // permission state may have changed off-screen
-        }
+        gate.value = gate.value + 1 // permission state may have changed off-screen
         app.cruiser.notify.TurnSource.rebind(this)
         app.cruiser.notify.ComapsSource.start(this)
     }
@@ -526,19 +526,41 @@ private fun PinDialog() {
     )
 }
 
+private fun Context.hasRequiredPermissions(): Boolean =
+    has(Manifest.permission.BLUETOOTH_CONNECT) &&
+        has(Manifest.permission.BLUETOOTH_SCAN) &&
+        has(Manifest.permission.ACCESS_FINE_LOCATION) &&
+        listenerGranted(this)
+
 internal fun Context.podStart(mac: String? = null) {
+    if (!hasRequiredPermissions()) {
+        MainActivity.gate.value = MainActivity.gate.value + 1
+        return
+    }
     // Instant press feedback; the service overwrites this with real states.
     Session.linkState.value = LinkState.CONNECTING
     val intent = Intent(this, PodService::class.java).setAction(PodService.ACTION_START)
     if (mac != null) intent.putExtra(PodService.EXTRA_MAC, mac)
-    ContextCompat.startForegroundService(this, intent)
+    try {
+        ContextCompat.startForegroundService(this, intent)
+    } catch (_: Exception) {
+        MainActivity.gate.value = MainActivity.gate.value + 1
+    }
 }
 
 internal fun Context.podScanNew() {
+    if (!hasRequiredPermissions()) {
+        MainActivity.gate.value = MainActivity.gate.value + 1
+        return
+    }
     Session.linkState.value = LinkState.SCANNING
     val intent = Intent(this, PodService::class.java).setAction(PodService.ACTION_START)
     intent.putExtra(PodService.EXTRA_SCAN_NEW, true)
-    ContextCompat.startForegroundService(this, intent)
+    try {
+        ContextCompat.startForegroundService(this, intent)
+    } catch (_: Exception) {
+        MainActivity.gate.value = MainActivity.gate.value + 1
+    }
 }
 
 internal fun Context.podStop() {

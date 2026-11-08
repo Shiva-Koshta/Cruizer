@@ -29,7 +29,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,12 +40,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.cruiser.Session
 import androidx.core.content.ContextCompat
 
 /**
- * Playful, motorcycle-themed first-run setup.
- * Once completed or skipped, [Session.onboardingCompleted] is saved and this screen never appears again.
+ * First-run and permission recovery screen.
+ * Re-checks live; shows which permissions are Required vs Optional.
  */
 @Composable
 fun OnboardingScreen(modifier: Modifier = Modifier) {
@@ -64,11 +62,11 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         app.cruiser.notify.ComapsSource.start(context)
-        MainActivity.gate.tryEmit(1)
+        MainActivity.gate.tryEmit(MainActivity.gate.value + 1)
     }
 
     val comapsPerms = app.cruiser.notify.ComapsSource.permissions(context)
-    val allEssentialsGranted = btPerms && location && listener
+    val allRequiredGranted = btPerms && location && listener
 
     Column(
         modifier = modifier
@@ -79,27 +77,28 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // Playful Motorcycle Header
+        // App Header
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                "Cruiser 🏍️",
+                "Cruiser",
                 style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                "Tune your phone to your Royal Enfield Tripper Pod in a few quick pit stops.",
+                "Grant the required permissions below to connect your Tripper Pod and stream turn-by-turn navigation.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
-        // Pit Stop 1: Bluetooth Dial Link
-        PitStopCard(
+        // 1. Nearby Devices (Bluetooth) - Required
+        PermissionCard(
             emoji = "📡",
-            title = "Pit Stop 1: Dial Link",
-            description = "Bluetooth permissions so Cruiser can discover and pair with your Tripper Pod.",
+            title = "Nearby devices (Bluetooth)",
+            description = "Required to scan, connect, and stream navigation frames to your Tripper Pod.",
             ready = btPerms,
-            actionLabel = "Grant Link",
+            required = true,
+            actionLabel = "Grant Permission",
         ) {
             permLauncher.launch(
                 arrayOf(
@@ -110,13 +109,14 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        // Pit Stop 2: Navigation GPS
-        PitStopCard(
+        // 2. Location - Required
+        PermissionCard(
             emoji = "📍",
-            title = "Pit Stop 2: Co-Pilot GPS",
-            description = "Satellite tracking for live speedometer, ride distance, and automatic dawn/dusk night mode.",
+            title = "Location",
+            description = "Required for GPS ride tracking, speed calculation, and sunrise/sunset dial mode.",
             ready = location,
-            actionLabel = "Enable GPS",
+            required = true,
+            actionLabel = "Grant Permission",
         ) {
             permLauncher.launch(
                 arrayOf(
@@ -126,38 +126,39 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        // Pit Stop 3: Notification Listener
-        PitStopCard(
+        // 3. Notification Access - Required
+        PermissionCard(
             emoji = "🔔",
-            title = "Pit Stop 3: Nav Listener",
-            description = "Reads turn-by-turn arrows from Google Maps, Organic Maps, and Waze to beam to your dial.",
+            title = "Notification access",
+            description = "Required to read turn instructions from Google Maps, CoMaps, and Waze.",
             ready = listener,
-            actionLabel = "Allow Access",
+            required = true,
+            actionLabel = "Open Settings",
         ) {
             context.openListenerSettings()
         }
 
-        // Pit Stop 4: Call Overlay (Optional)
-        PitStopCard(
+        // 4. Phone State - Optional
+        PermissionCard(
             emoji = "📞",
-            title = "Pit Stop 4: Caller ID (Optional)",
-            description = "Shows incoming phone call notifications directly on your dial while riding.",
+            title = "Phone calls",
+            description = "Shows incoming caller name or number on your Tripper Pod while riding.",
             ready = phone,
-            actionLabel = "Enable Calls",
-            optional = true,
+            required = false,
+            actionLabel = "Allow",
         ) {
             permLauncher.launch(arrayOf(Manifest.permission.READ_PHONE_STATE))
         }
 
-        // CoMaps Integration (if installed)
+        // 5. CoMaps Direct Feed - Optional
         if (comapsPerms.isNotEmpty()) {
-            PitStopCard(
+            PermissionCard(
                 emoji = "🗺️",
-                title = "CoMaps Direct Feed",
-                description = "Direct ContentProvider integration for exact machine turn arrows without notification text parsing.",
+                title = "CoMaps navigation data",
+                description = "Direct structured data provider access for CoMaps / Organic Maps.",
                 ready = false,
-                actionLabel = "Grant CoMaps",
-                optional = true,
+                required = false,
+                actionLabel = "Grant",
             ) {
                 permLauncher.launch(comapsPerms.toTypedArray())
             }
@@ -165,20 +166,22 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(8.dp))
 
-        // Finish Line Button: Commits onboarding and enters the app permanently
+        // Get Started Button: Only enabled when all required permissions are satisfied
         Button(
-            onClick = { Session.completeOnboarding() },
+            onClick = {
+                MainActivity.gate.value = MainActivity.gate.value + 1
+            },
+            enabled = allRequiredGranted,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp),
+                .height(52.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (allEssentialsGranted) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.secondary,
+                containerColor = MaterialTheme.colorScheme.primary,
             ),
         ) {
             Text(
-                if (allEssentialsGranted) "Let's Ride 🏍️" else "Continue to Dashboard ➔",
+                "Get Started",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             )
         }
@@ -188,13 +191,13 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun PitStopCard(
+private fun PermissionCard(
     emoji: String,
     title: String,
     description: String,
     ready: Boolean,
+    required: Boolean,
     actionLabel: String,
-    optional: Boolean = false,
     onAction: () -> Unit,
 ) {
     Surface(
@@ -236,11 +239,19 @@ private fun PitStopCard(
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        if (optional) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (required) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        ) {
                             Text(
-                                "Optional",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                if (required) "Required" else "Optional",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                fontWeight = if (required) FontWeight.Bold else FontWeight.Normal,
+                                color = if (required) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }

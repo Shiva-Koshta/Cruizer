@@ -510,10 +510,19 @@ class PodService : Service() {
             .build()
         // A trip needs the location type, but only while the permission is held:
         // startForeground throws without it on Android 14+.
+        val withConnectedDevice = hasPerm(Manifest.permission.BLUETOOTH_CONNECT)
         val withLocation = hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)
+        if (!withConnectedDevice) {
+            stopSelf()
+            return
+        }
         val type = FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
             (if (withLocation) FOREGROUND_SERVICE_TYPE_LOCATION else 0)
-        startForeground(NOTIF_ID, n, type)
+        try {
+            startForeground(NOTIF_ID, n, type)
+        } catch (_: Exception) {
+            stopSelf()
+        }
     }
 
     private fun updateForeground(state: LinkState) {
