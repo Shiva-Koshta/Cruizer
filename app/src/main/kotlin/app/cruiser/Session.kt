@@ -1,19 +1,17 @@
 package app.cruiser
 
 import android.content.Context
+import android.location.Location
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import android.location.Location
-import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.cruiser.ble.LinkState
 import app.cruiser.proto.TurnUpdate
-import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,9 +26,7 @@ internal val Context.cruiserStore by preferencesDataStore("cruiser")
 
 /**
  * Process-wide shared state between the turn source, the BLE service and the UI.
- * Plain flows, no DI framework. Call [init] once when the process starts (either
- * entry point is fine); after that every setting change persists immediately —
- * not only while the Pod service happens to be running.
+ * Plain flows, no DI framework.
  */
 object Session {
 
@@ -39,8 +35,6 @@ object Session {
     private const val KEY_THEME = "theme_mode"
     private const val KEY_CYCLE_INTERVAL = "cycle_interval"
     private const val KEY_SAVED_PODS = "saved_pods"
-    private const val KEY_BIKE_MODEL = "bike_model"
-    private const val KEY_CUSTOM_KMPL = "custom_kmpl"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -65,17 +59,14 @@ object Session {
                             .getOrElse(p[intPreferencesKey(KEY_THEME)] ?: 0) { ThemeMode.SYSTEM },
                         cycleIntervalSeconds = p[intPreferencesKey(KEY_CYCLE_INTERVAL)] ?: 5,
                         twelveHourClock = p[booleanPreferencesKey("clock_12h")] ?: false,
-                        imperial = p[booleanPreferencesKey("imperial")]
-                            ?: Locale.getDefault().country in setOf("US", "GB", "LR", "MM"),
-                        bikeModel = BikeModel.entries
-                            .getOrElse(p[intPreferencesKey(KEY_BIKE_MODEL)] ?: 0) { BikeModel.J_SERIES_350 },
-                        customKmpl = p[doublePreferencesKey(KEY_CUSTOM_KMPL)] ?: 35.0,
+                        // Indian standard units (metric: km, km/h, km/L, Liters) by default unless toggled
+                        imperial = p[booleanPreferencesKey("imperial")] ?: false,
                     )
                     var pods = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
                     val rememberedMac = context.getSharedPreferences("pod", Context.MODE_PRIVATE)
                         .getString("pod_mac", null)
                     if (rememberedMac != null && pods.none { it.mac == rememberedMac }) {
-                        pods = pods + SavedPod(rememberedMac, "My Bike")
+                        pods = pods + SavedPod(rememberedMac, "My Bike", BikeModel.METEOR_350)
                         persistSavedPods(pods)
                     }
                     _savedPods.value = pods
@@ -94,20 +85,34 @@ object Session {
 
     enum class PhoneCall { NONE, INCOMING, ACTIVE }
 
-    enum class BikeModel(val label: String, val kmpl: Double) {
-        J_SERIES_350("Royal Enfield 350cc (Meteor/Classic/Hunter)", 36.0),
-        TWINS_650("Royal Enfield 650cc (Interceptor/GT/Super Meteor)", 25.0),
-        SHERPA_450("Royal Enfield 450cc (Himalayan/Guerrilla)", 30.0),
-        HIMALAYAN_411("Royal Enfield 411cc (Himalayan/Scram)", 32.0),
-        CUSTOM("Custom Mileage", 35.0);
+    /** Official Royal Enfield catalogue models with displacement and verified average fuel economy. */
+    enum class BikeModel(val label: String, val cc: Int, val kmpl: Double) {
+        HUNTER_350("Hunter 350", 349, 36.2),
+        CLASSIC_350("Classic 350", 349, 37.7),
+        METEOR_350("Meteor 350", 349, 36.5),
+        BULLET_350("Bullet 350", 349, 37.0),
+        HIMALAYAN_450("Himalayan 450", 452, 30.0),
+        GUERRILLA_450("Guerrilla 450", 452, 29.5),
+        HIMALAYAN_411("Himalayan 411 / Scram", 411, 32.0),
+        INTERCEPTOR_650("Interceptor 650", 648, 24.0),
+        CONTINENTAL_GT_650("Continental GT 650", 648, 25.0),
+        SUPER_METEOR_650("Super Meteor 650", 648, 23.5),
+        SHOTGUN_650("Shotgun 650", 648, 23.5),
+        CLASSIC_650("Classic 650 / Bear", 648, 24.0),
+        CUSTOM("Custom Motorcycle", 0, 35.0);
     }
 
+    /** A paired bike with its custom nickname and engine profile/mileage. */
     data class SavedPod(
         val mac: String,
         val nickname: String,
-        val model: BikeModel = BikeModel.J_SERIES_350,
-        val customKmpl: Double = 36.0,
-    )
+        val model: BikeModel = BikeModel.METEOR_350,
+        val customCc: Int = 350,
+        val customKmpl: Double = 36.5,
+    ) {
+        val effectiveKmpl: Double get() = if (model == BikeModel.CUSTOM) customKmpl else model.kmpl
+        val effectiveCc: Int get() = if (model == BikeModel.CUSTOM) customCc else model.cc
+    }
 
     data class Settings(
         val nightMode: NightMode = NightMode.AUTO,
@@ -115,10 +120,8 @@ object Session {
         val themeMode: ThemeMode = ThemeMode.SYSTEM,
         val cycleIntervalSeconds: Int = 5,
         val twelveHourClock: Boolean = false,
-        /** imperial feet/miles; default metric (Indian standard units) */
+        /** Indian standard units (km, km/h, km/L, Liters) by default; imperial feet/miles when true */
         val imperial: Boolean = false,
-        val bikeModel: BikeModel = BikeModel.J_SERIES_350,
-        val customKmpl: Double = 35.0,
     )
 
     private val _settings = MutableStateFlow(Settings())
@@ -148,10 +151,13 @@ object Session {
         val speedKmh = Math.round(location.speed * 3.6f).coerceAtLeast(0)
         val current = _liveRide.value
         val isMoving = speedKmh > 1
+
+        // Only start or tick the timer when connected, navigating, or actually moving
         if (!isConnected && !isMoving && !navActive.value) {
             lastLiveLoc = location
             return
         }
+
         val started = current.startedAt ?: System.currentTimeMillis()
         val elapsed = ((System.currentTimeMillis() - started) / 1000).coerceAtLeast(0)
         val prev = lastLiveLoc
@@ -161,6 +167,7 @@ object Session {
         val newDist = current.distanceM + add
         val elapsedHours = elapsed / 3600.0
         val avgSpeed = if (elapsedHours > 0.0005) Math.round((newDist / 1000.0) / elapsedHours).toInt() else speedKmh
+
         _liveRide.value = current.copy(
             isActive = true,
             startedAt = started,
@@ -188,16 +195,20 @@ object Session {
                 it[intPreferencesKey(KEY_CYCLE_INTERVAL)] = next.cycleIntervalSeconds
                 it[booleanPreferencesKey("clock_12h")] = next.twelveHourClock
                 it[booleanPreferencesKey("imperial")] = next.imperial
-                it[intPreferencesKey(KEY_BIKE_MODEL)] = next.bikeModel.ordinal
-                it[doublePreferencesKey(KEY_CUSTOM_KMPL)] = next.customKmpl
             }
         }
     }
 
-    fun savePod(mac: String, nickname: String, model: BikeModel = BikeModel.J_SERIES_350, customKmpl: Double = 36.0) {
+    fun savePod(
+        mac: String,
+        nickname: String,
+        model: BikeModel = BikeModel.METEOR_350,
+        customCc: Int = 350,
+        customKmpl: Double = 36.5,
+    ) {
         val trimmed = nickname.trim().ifEmpty { "Tripper Pod" }
         val current = _savedPods.value.filter { it.mac != mac }
-        val updated = current + SavedPod(mac, trimmed, model, customKmpl)
+        val updated = current + SavedPod(mac, trimmed, model, customCc, customKmpl)
         _savedPods.value = updated
         persistSavedPods(updated)
     }
@@ -219,7 +230,7 @@ object Session {
         scope.launch {
             store?.edit {
                 it[stringPreferencesKey(KEY_SAVED_PODS)] = pods.joinToString("\n") { p ->
-                    "${p.mac}|${p.nickname}|${p.model.ordinal}|${p.customKmpl}"
+                    "${p.mac}|${p.nickname}|${p.model.ordinal}|${p.customCc}|${p.customKmpl}"
                 }
             }
         }
@@ -235,9 +246,10 @@ object Session {
                     val nickname = parts[1].trim()
                     val model = parts.getOrNull(2)?.toIntOrNull()?.let { ord ->
                         BikeModel.entries.getOrNull(ord)
-                    } ?: BikeModel.J_SERIES_350
-                    val kmpl = parts.getOrNull(3)?.toDoubleOrNull() ?: model.kmpl
-                    SavedPod(mac, nickname, model, kmpl)
+                    } ?: BikeModel.METEOR_350
+                    val customCc = parts.getOrNull(3)?.toIntOrNull() ?: model.cc
+                    val customKmpl = parts.getOrNull(4)?.toDoubleOrNull() ?: model.kmpl
+                    SavedPod(mac, nickname, model, customCc, customKmpl)
                 } else null
             }
             .toList()
@@ -269,13 +281,6 @@ object Session {
     /** UI -> service channel for the 6-digit PIN the user typed (manual DI). */
     val pinInput = MutableSharedFlow<String>(extraBufferCapacity = 4)
 
-    /**
-     * UI (Trips tab) -> service: start/stop the ride. StateFlow, not SharedFlow,
-     * so a command survives the cold start of the service; the service consumes
-     * it and clears back to null.
-     */
-    val tripCommand = MutableStateFlow<Boolean?>(null)
-
     private val _phoneCall = MutableStateFlow(PhoneCall.NONE)
     val phoneCall: StateFlow<PhoneCall> = _phoneCall
 
@@ -295,23 +300,4 @@ object Session {
     /** Coarse location cache for the AUTO night mode (sunrise/sunset). */
     @Volatile var lastLat: Double? = null
     @Volatile var lastLon: Double? = null
-
-    /** Live ride; null when no ride is active. */
-    data class TripState(val startedAt: Long, val distanceM: Int, val lastLoc: android.location.Location?)
-
-    private val _trip = MutableStateFlow<TripState?>(null)
-    val trip: StateFlow<TripState?> = _trip
-
-    fun startTrip(startedAt: Long) {
-        _trip.value = TripState(startedAt, 0, null)
-    }
-
-    fun updateTrip(distanceM: Int, lastLoc: android.location.Location?) {
-        _trip.value = _trip.value?.copy(distanceM = distanceM, lastLoc = lastLoc ?: _trip.value?.lastLoc)
-    }
-
-    fun endTrip() {
-        _trip.value = null
-    }
-
 }

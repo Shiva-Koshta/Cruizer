@@ -244,7 +244,7 @@ private fun LiveRideMetricsSection(ride: Session.LiveRide, settings: Session.Set
     }
 
     val bike = Session.activeBike()
-    val kmpl = if (bike?.model == Session.BikeModel.CUSTOM) bike.customKmpl else (bike?.model?.kmpl ?: settings.bikeModel.kmpl)
+    val kmpl = bike?.effectiveKmpl ?: 36.5
     val liters = (ride.distanceM / 1000.0) / kmpl.coerceAtLeast(1.0)
     val fuelStr = if (!settings.imperial) {
         "%.2f L".format(Locale.US, liters)
@@ -252,9 +252,9 @@ private fun LiveRideMetricsSection(ride: Session.LiveRide, settings: Session.Set
         "%.2f gal".format(Locale.US, liters * 0.264172)
     }
     val economyStr = if (!settings.imperial) {
-        "%.0f km/L".format(Locale.US, kmpl)
+        "%.1f km/L".format(Locale.US, kmpl)
     } else {
-        "%.0f mpg".format(Locale.US, kmpl * 2.35215)
+        "%.1f mpg".format(Locale.US, kmpl * 2.35215)
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -409,6 +409,7 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
     renamingPod?.let { pod ->
         var newName by remember(pod) { mutableStateOf(pod.nickname) }
         var selectedModel by remember(pod) { mutableStateOf(pod.model) }
+        var customCc by remember(pod) { mutableStateOf(pod.customCc.toString()) }
         var customKmpl by remember(pod) { mutableStateOf(pod.customKmpl.toString()) }
 
         AlertDialog(
@@ -424,41 +425,52 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxWidth(),
                     )
 
-                    Text("Engine Model", style = MaterialTheme.typography.labelMedium)
+                    Text("Royal Enfield Catalogue", style = MaterialTheme.typography.labelMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Session.BikeModel.entries.forEach { m ->
                             FilterChip(
                                 selected = selectedModel == m,
                                 onClick = { selectedModel = m },
-                                label = {
-                                    val short = when (m) {
-                                        Session.BikeModel.J_SERIES_350 -> "350cc"
-                                        Session.BikeModel.TWINS_650 -> "650cc"
-                                        Session.BikeModel.SHERPA_450 -> "450cc"
-                                        Session.BikeModel.HIMALAYAN_411 -> "411cc"
-                                        Session.BikeModel.CUSTOM -> "Custom"
-                                    }
-                                    Text(short)
-                                },
+                                label = { Text(m.label) },
                             )
                         }
                     }
 
                     if (selectedModel == Session.BikeModel.CUSTOM) {
                         OutlinedTextField(
-                            value = customKmpl,
-                            onValueChange = { customKmpl = it },
-                            label = { Text("Mileage (km/L)") },
+                            value = customCc,
+                            onValueChange = { customCc = it },
+                            label = { Text("Displacement (cc)") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                            ),
+                        )
+                        OutlinedTextField(
+                            value = customKmpl,
+                            onValueChange = { customKmpl = it },
+                            label = { Text("Average Mileage (km/L)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal,
+                            ),
+                        )
+                    } else {
+                        Text(
+                            "${selectedModel.cc}cc Engine · Factory Average: ${selectedModel.kmpl} km/L",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
             },
             confirmButton = {
                 Button(onClick = {
+                    val ccVal = customCc.toIntOrNull() ?: selectedModel.cc
                     val kmplVal = customKmpl.toDoubleOrNull() ?: selectedModel.kmpl
-                    Session.savePod(pod.mac, newName, selectedModel, kmplVal)
+                    Session.savePod(pod.mac, newName, selectedModel, ccVal, kmplVal)
                     renamingPod = null
                 }) {
                     Text("Save")

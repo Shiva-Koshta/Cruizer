@@ -26,8 +26,6 @@ import app.cruiser.proto.Icons
 import app.cruiser.proto.PodProtocol
 import app.cruiser.proto.TurnUpdate
 import app.cruiser.ui.MainActivity
-import app.cruiser.trip.TripRecorder
-import app.cruiser.trip.TripStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,8 +65,6 @@ class PodService : Service() {
     private lateinit var link: PodLink
     private var tickJob: Job? = null
     private var telephonyCallback: TelephonyCallback? = null
-    private lateinit var recorder: TripRecorder
-
     private var lastFrameSentAt = 0L
     private var lastTurn: TurnUpdate? = null
     private var lastManeuver: Int? = null
@@ -89,36 +85,13 @@ class PodService : Service() {
         link.onCommand = ::onPodCommand
         observe()
         restorePairedAddress()
-        recorder = TripRecorder(this)
-        // GPS listening is trip-scoped: holding a 1 Hz session the whole time the
-        // service runs starves nav apps (notably CoMaps' faster fixer) of it.
+        // GPS listening is live while connected
         refreshLocation()
         registerPhoneState()
         ComapsSource.start(this) // structured turn data from CoMaps, if installed+granted
         app.cruiser.notify.TurnSource.rebind(this) // ask OS to bind the listener if enabled
         // UI PIN submissions -> Pod (PIN typed on the connection dialog).
         scope.launch { Session.pinInput.collect { link.send(PodProtocol.pinFrame(it)) } }
-        // Trips tab start/stop -> recorder (service consumes and clears).
-        scope.launch {
-            Session.tripCommand.collect { cmd ->
-                when (cmd) {
-                    null -> {}
-                    true -> {
-                        recorder.startListening()
-                        recorder.startTrip(System.currentTimeMillis())
-                        // Trip active: include the location FGS type so GPS keeps
-                        // flowing with the screen off.
-                        updateForeground(link.state.value)
-                    }
-                    false -> {
-                        recorder.stopTrip()
-                        recorder.stopListening()
-                        updateForeground(link.state.value)
-                    }
-                }
-                Session.tripCommand.value = null
-            }
-        }
         tickJob = scope.launch {
             // The Pod only advertises for ~30 s after ignition-on, so reconnect
             // attempts keep pacing in the background.
@@ -128,8 +101,7 @@ class PodService : Service() {
             while (isActive) {
                 if (link.state.value != LinkState.CONNECTED) {
                     disconnectedMs += CONNECT_PAUSE_MS
-                    // A ride being recorded needs the service even without a Pod.
-                    if (Session.trip.value == null && disconnectedMs > STOP_AFTER_DISCONNECTED_MS) {
+                    if (disconnectedMs > STOP_AFTER_DISCONNECTED_MS) {
                         // Pod never showed up (ignition off / forgotten) — don't
                         // burn battery scanning all day. "Connect" revives this.
                         if (BuildConfig.DEBUG) Log.i("CruiserNav", "stopping: no Pod for 5 min")
@@ -191,8 +163,6 @@ class PodService : Service() {
         if (BuildConfig.DEBUG) Log.i("CruiserNav", "service stopped")
         tickJob?.cancel()
         unregisterPhoneState()
-        recorder.stopTrip()
-        recorder.stopListening()
         stopLiveLocation()
         link.disconnect()
         link.closeServer()
@@ -535,8 +505,7 @@ class PodService : Service() {
             .build()
         // A trip needs the location type, but only while the permission is held:
         // startForeground throws without it on Android 14+.
-        val withLocation = Session.trip.value != null &&
-            hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)
+        val withLocation = hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)
         val type = FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
             (if (withLocation) FOREGROUND_SERVICE_TYPE_LOCATION else 0)
         startForeground(NOTIF_ID, n, type)

@@ -114,31 +114,6 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                 SettingSwitch("Imperial units", s.imperial) { v ->
                     Session.updateSettings { it.copy(imperial = v) }
                 }
-
-                Text("Motorcycle Profile & Mileage", style = MaterialTheme.typography.titleSmall)
-                Session.BikeModel.entries.forEach { model ->
-                    FilterChip(
-                        selected = s.bikeModel == model,
-                        onClick = { Session.updateSettings { it.copy(bikeModel = model) } },
-                        label = {
-                            val mileageStr = if (!s.imperial) "${model.kmpl.toInt()} km/L" else "${(model.kmpl * 2.35215).toInt()} mpg"
-                            Text(if (model == Session.BikeModel.CUSTOM) model.label else "${model.label} ($mileageStr)")
-                        },
-                    )
-                }
-                if (s.bikeModel == Session.BikeModel.CUSTOM) {
-                    var customText by remember(s.customKmpl) { mutableStateOf(s.customKmpl.toString()) }
-                    OutlinedTextField(
-                        value = customText,
-                        onValueChange = { str ->
-                            customText = str
-                            str.toDoubleOrNull()?.let { v -> Session.updateSettings { it.copy(customKmpl = v) } }
-                        },
-                        label = { Text(if (!s.imperial) "Custom Mileage (km/L)" else "Custom Mileage (mpg)") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    )
-                }
             }
         }
 

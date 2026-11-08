@@ -10,6 +10,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +34,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -77,7 +86,7 @@ class MainActivity : ComponentActivity() {
     /** Tabs + the debug-only playground page; a nav library would be overkill. */
     private val page = MutableStateFlow(Page.POD)
 
-    private enum class Page { POD, TRIPS, SETTINGS, PLAYGROUND }
+    private enum class Page { POD, SETTINGS, PLAYGROUND }
 
     companion object {
         /**
@@ -137,83 +146,89 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Tabs(modifier: Modifier = Modifier) {
         val current by page.collectAsState()
-        Scaffold(
-            modifier = modifier,
-            contentWindowInsets = WindowInsets.safeDrawing,
-            bottomBar = {
-                if (current != Page.PLAYGROUND) {
-                    Box(
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing),
+        ) {
+            // Main Content Area with AnimatedContent for smooth transitions
+            AnimatedContent(
+                targetState = current,
+                transitionSpec = {
+                    (fadeIn(animationSpec = tween(220, delayMillis = 50)) +
+                        slideInHorizontally(animationSpec = tween(250)) { width -> if (targetState.ordinal > initialState.ordinal) width / 4 else -width / 4 })
+                        .togetherWith(
+                            fadeOut(animationSpec = tween(150)) +
+                                slideOutHorizontally(animationSpec = tween(200)) { width -> if (targetState.ordinal > initialState.ordinal) -width / 4 else width / 4 },
+                        )
+                },
+                label = "tab_transition",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = if (current != Page.PLAYGROUND) 80.dp else 0.dp),
+            ) { targetPage ->
+                when (targetPage) {
+                    Page.POD -> PodScreen()
+                    Page.SETTINGS -> SettingsScreen(
+                        onPlayground = { page.value = Page.PLAYGROUND },
+                    )
+                    Page.PLAYGROUND -> PlaygroundScreen(onBack = { page.value = Page.SETTINGS })
+                }
+            }
+
+            // Truly Floating Capsule Pill Bar (Transparent surround, shadow + tonal elevation)
+            if (current != Page.PLAYGROUND) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.95f),
+                    tonalElevation = 8.dp,
+                    shadowElevation = 10.dp,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 12.dp)
+                        .height(60.dp),
+                ) {
+                    Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(horizontal = 24.dp, vertical = 10.dp),
-                        contentAlignment = Alignment.Center,
+                            .padding(horizontal = 8.dp)
+                            .fillMaxHeight(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.95f),
-                            tonalElevation = 8.dp,
-                            shadowElevation = 8.dp,
-                            modifier = Modifier.height(62.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(horizontal = 8.dp)
-                                    .fillMaxHeight(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                        listOf(
+                            Page.POD to ("Bike" to Icons.Filled.Home),
+                            Page.SETTINGS to ("Settings" to Icons.Filled.Settings),
+                        ).forEach { (p, pair) ->
+                            val (label, icon) = pair
+                            val isSelected = current == p
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                modifier = Modifier.clickable { page.value = p },
                             ) {
-                                listOf(
-                                    Page.POD to ("Bike" to Icons.Filled.Home),
-                                    Page.TRIPS to ("Trips" to Icons.Filled.LocationOn),
-                                    Page.SETTINGS to ("Settings" to Icons.Filled.Settings),
-                                ).forEach { (p, pair) ->
-                                    val (label, icon) = pair
-                                    val isSelected = current == p
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                        modifier = Modifier.clickable { page.value = p },
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        ) {
-                                            Icon(
-                                                icon,
-                                                contentDescription = label,
-                                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(20.dp),
-                                            )
-                                            if (isSelected) {
-                                                Text(
-                                                    label,
-                                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                )
-                                            }
-                                        }
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Icon(
+                                        icon,
+                                        contentDescription = label,
+                                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                    AnimatedVisibility(visible = isSelected) {
+                                        Text(
+                                            label,
+                                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        )
                                     }
                                 }
                             }
                         }
                     }
-                }
-            },
-        ) { pad ->
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(pad),
-            ) {
-                when (current) {
-                    Page.POD -> PodScreen()
-                    Page.TRIPS -> TripsScreen()
-                    Page.SETTINGS -> SettingsScreen(
-                        onPlayground = { page.value = Page.PLAYGROUND },
-                    )
-                    Page.PLAYGROUND -> PlaygroundScreen(onBack = { page.value = Page.SETTINGS })
                 }
             }
         }
