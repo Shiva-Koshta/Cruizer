@@ -104,14 +104,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Request hardware maximum refresh rate (120Hz) for fluid animations
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            val maxMode = display?.supportedModes?.maxByOrNull { it.refreshRate }
-            window.attributes = window.attributes.apply {
-                preferredRefreshRate = 120f
-                if (maxMode != null) preferredDisplayModeId = maxMode.modeId
-            }
-        }
         // Settings persist from here, not from the Pod service, so theme changes
         // survive even when the rider never connects.
         Session.init(applicationContext)
@@ -213,7 +205,6 @@ class MainActivity : ComponentActivity() {
             ) {
                 HorizontalPager(
                     state = pagerState,
-                    beyondViewportPageCount = 1,
                     modifier = Modifier.fillMaxSize(),
                 ) { pageIndex ->
                     when (pageIndex) {
@@ -264,8 +255,8 @@ class MainActivity : ComponentActivity() {
             shape = CircleShape,
             color = if (isGlass) Color.Transparent
             else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.95f),
-            tonalElevation = 8.dp,
-            shadowElevation = 12.dp,
+            tonalElevation = if (isGlass) 0.dp else 8.dp,
+            shadowElevation = if (isGlass) 0.dp else 12.dp,
             modifier = modifier
                 .navigationBarsPadding()
                 .padding(bottom = 12.dp)

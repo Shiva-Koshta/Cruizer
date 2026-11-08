@@ -3,6 +3,7 @@ package app.cruiser.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.padding
@@ -126,29 +127,34 @@ fun CruiserGlassCard(
         }
     }
 
-    val cardModifier = if (isGlass && glassBackground != null && glassBorder != null && sheenBrush != null) {
-        modifier
-            .clip(shape)
-            .background(glassBackground)
-            .border(width = 1.dp, brush = glassBorder, shape = shape)
-            .drawWithContent {
-                drawContent()
-                drawRect(sheenBrush)
-            }
+    if (isGlass && glassBackground != null && glassBorder != null && sheenBrush != null) {
+        Box(
+            modifier = modifier
+                .clip(shape)
+                .background(glassBackground)
+                .border(width = 1.dp, brush = glassBorder, shape = shape)
+                .drawWithContent {
+                    drawContent()
+                    drawRect(sheenBrush)
+                },
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                content = content,
+            )
+        }
     } else {
-        modifier
-    }
-
-    Card(
-        modifier = cardModifier,
-        shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            content = content,
-        )
+        Card(
+            modifier = modifier,
+            shape = shape,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ),
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                content = content,
+            )
+        }
     }
 }
