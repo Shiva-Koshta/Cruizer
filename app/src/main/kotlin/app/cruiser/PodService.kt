@@ -191,6 +191,7 @@ class PodService : Service() {
     private fun observe() {
         link.state.onEach { st ->
             Session.linkState.value = st
+            if (BuildConfig.DEBUG) Log.i("CruiserNav", "link state → $st")
             updateForeground(st)
             if (st == LinkState.CONNECTED) handshake()
             if (st == LinkState.DISCONNECTED) {
@@ -276,6 +277,7 @@ class PodService : Service() {
     }
 
     private fun awaitPin(on: Boolean) {
+        if (awaitingPin == on) return
         Session.awaitingPin.value = on
         awaitingPin = on
         updateForeground(link.state.value)

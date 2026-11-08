@@ -284,6 +284,8 @@ private fun PinDialog() {
 }
 
 internal fun Context.podStart() {
+    // Instant press feedback; the service overwrites this with real states.
+    Session.linkState.value = LinkState.CONNECTING
     ContextCompat.startForegroundService(
         this,
         Intent(this, PodService::class.java).setAction(PodService.ACTION_START),
