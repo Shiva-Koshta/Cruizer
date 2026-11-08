@@ -51,18 +51,23 @@ object Session {
             initialized = true
             scope.launch {
                 store?.data?.first()?.let { p ->
+                    val theme = NightMode.entries
+                    val themeChoice = ThemeMode.entries
+                        .getOrElse(p[intPreferencesKey(KEY_THEME)] ?: 0) { ThemeMode.SYSTEM }
+                    val glassChoice = p[booleanPreferencesKey("liquid_glass")] ?: true
+                    themeMode.value = themeChoice
+                    isLiquidGlass.value = glassChoice
                     _settings.value = _settings.value.copy(
                         nightMode = NightMode.entries
                             .getOrElse(p[intPreferencesKey(KEY_NIGHT)] ?: 2) { NightMode.AUTO },
                         bottomMode = BottomMode.entries
                             .getOrElse(p[intPreferencesKey(KEY_BOTTOM)] ?: 2) { BottomMode.ARRIVAL },
-                        themeMode = ThemeMode.entries
-                            .getOrElse(p[intPreferencesKey(KEY_THEME)] ?: 0) { ThemeMode.SYSTEM },
+                        themeMode = themeChoice,
                         cycleIntervalSeconds = p[intPreferencesKey(KEY_CYCLE_INTERVAL)] ?: 5,
                         twelveHourClock = p[booleanPreferencesKey("clock_12h")] ?: false,
                         // Indian standard units (metric: km, km/h, km/L, Liters) by default unless toggled
                         imperial = p[booleanPreferencesKey("imperial")] ?: false,
-                        liquidGlass = p[booleanPreferencesKey("liquid_glass")] ?: true,
+                        liquidGlass = glassChoice,
                     )
                     var pods = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
                     val rememberedMac = context.getSharedPreferences("pod", Context.MODE_PRIVATE)
@@ -129,6 +134,8 @@ object Session {
 
     private val _settings = MutableStateFlow(Settings())
     val settings: StateFlow<Settings> = _settings
+    val isLiquidGlass = MutableStateFlow(true)
+    val themeMode = MutableStateFlow(ThemeMode.SYSTEM)
 
     private val _savedPods = MutableStateFlow<List<SavedPod>>(emptyList())
     val savedPods: StateFlow<List<SavedPod>> = _savedPods
@@ -190,6 +197,8 @@ object Session {
     fun updateSettings(f: (Settings) -> Settings) {
         val next = f(_settings.value)
         _settings.value = next
+        if (themeMode.value != next.themeMode) themeMode.value = next.themeMode
+        if (isLiquidGlass.value != next.liquidGlass) isLiquidGlass.value = next.liquidGlass
         scope.launch {
             store?.edit {
                 it[intPreferencesKey(KEY_NIGHT)] = next.nightMode.ordinal

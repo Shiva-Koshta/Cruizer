@@ -88,8 +88,7 @@ fun CruiserGlassCard(
     shape: Shape = RoundedCornerShape(24.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val s by Session.settings.collectAsState()
-    val isGlass = s.liquidGlass
+    val isGlass by Session.isLiquidGlass.collectAsState()
     val dark = isSystemInDarkTheme()
     val topColor = MaterialTheme.colorScheme.surfaceContainerHigh
     val bottomColor = MaterialTheme.colorScheme.surfaceContainerLow

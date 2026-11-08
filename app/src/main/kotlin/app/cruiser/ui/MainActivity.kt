@@ -117,10 +117,8 @@ class MainActivity : ComponentActivity() {
         Session.init(applicationContext)
         enableEdgeToEdge()
         setContent {
-            val s by Session.settings.collectAsState()
-            // The app's own theme follows the rider's light/dark/system choice;
-            // the night-mode setting is about the Pod's screen, not this app.
-            val dark = when (s.themeMode) {
+            val theme by Session.themeMode.collectAsState()
+            val dark = when (theme) {
                 Session.ThemeMode.LIGHT -> false
                 Session.ThemeMode.DARK -> true
                 Session.ThemeMode.SYSTEM -> isSystemInDarkTheme()
@@ -142,7 +140,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        gate.value = gate.value + 1 // permission state may have changed off-screen
+        if (!isReady()) {
+            gate.value = gate.value + 1 // permission state may have changed off-screen
+        }
         app.cruiser.notify.TurnSource.rebind(this)
         app.cruiser.notify.ComapsSource.start(this)
     }
@@ -159,31 +159,27 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun Tabs(modifier: Modifier = Modifier) {
-        val s by Session.settings.collectAsState()
         val pagerState = rememberPagerState(initialPage = 0) { 2 } // 0 = Bike, 1 = Settings
         val scope = rememberCoroutineScope()
         var inPlayground by remember { mutableStateOf(false) }
 
         var backProgress by remember { mutableFloatStateOf(0f) }
 
-        // Predictive back for Playground overlay and Settings tab
-        PredictiveBackHandler(enabled = inPlayground || pagerState.currentPage != 0) { progress: Flow<BackEventCompat> ->
+        // Predictive back: active on Playground or on Settings (settledPage != 0)
+        // When on Bike (settledPage == 0 and not in playground), disabled -> system back exits to launcher
+        val isBackEnabled = inPlayground || pagerState.settledPage != 0
+        PredictiveBackHandler(enabled = isBackEnabled) { progress: Flow<BackEventCompat> ->
+            val fromPlayground = inPlayground
             try {
                 progress.collect { backEvent ->
                     backProgress = backEvent.progress
-                    if (!inPlayground && pagerState.currentPage != 0) {
-                        pagerState.requestScrollToPage(0, (1f - backEvent.progress).coerceIn(0f, 1f))
-                    }
                 }
-                if (inPlayground) {
+                if (fromPlayground) {
                     inPlayground = false
-                } else if (pagerState.currentPage != 0) {
+                } else {
                     scope.launch { pagerState.animateScrollToPage(0) }
                 }
             } catch (_: CancellationException) {
-                if (!inPlayground && pagerState.currentPage != 0) {
-                    scope.launch { pagerState.animateScrollToPage(1) }
-                }
             } finally {
                 backProgress = 0f
             }
@@ -204,6 +200,8 @@ class MainActivity : ComponentActivity() {
                             val scale = 0.94f + (backProgress * 0.06f)
                             scaleX = scale
                             scaleY = scale
+                        } else if (!inPlayground && pagerState.settledPage != 0 && backProgress > 0f) {
+                            translationX = backProgress * size.width * 0.25f
                         }
                     }
                     .drawWithContent {
@@ -246,63 +244,76 @@ class MainActivity : ComponentActivity() {
 
             // Truly Floating Capsule Pill Bar (Transparent surround, shadow + tonal elevation)
             if (!inPlayground) {
-                Surface(
-                    shape = CircleShape,
-                    color = if (s.liquidGlass) Color.Transparent
-                    else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.95f),
-                    tonalElevation = 8.dp,
-                    shadowElevation = 12.dp,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(bottom = 12.dp)
-                        .height(60.dp)
-                        .liquidGlass(s.liquidGlass, shape = CircleShape),
-                ) {
-                    Row(
+                FloatingPillBar(
+                    currentPage = pagerState.currentPage,
+                    onSelectPage = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun FloatingPillBar(
+        currentPage: Int,
+        onSelectPage: (Int) -> Unit,
+        modifier: Modifier = Modifier,
+    ) {
+        val isGlass by Session.isLiquidGlass.collectAsState()
+        Surface(
+            shape = CircleShape,
+            color = if (isGlass) Color.Transparent
+            else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.95f),
+            tonalElevation = 8.dp,
+            shadowElevation = 12.dp,
+            modifier = modifier
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp)
+                .height(60.dp)
+                .liquidGlass(isGlass, shape = CircleShape),
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 8.dp)
+                    .fillMaxHeight(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                listOf(
+                    0 to ("Bike" to Icons.Filled.Home),
+                    1 to ("Settings" to Icons.Filled.Settings),
+                ).forEach { (index, pair) ->
+                    val (label, icon) = pair
+                    val isSelected = currentPage == index
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
                         modifier = Modifier
-                            .padding(horizontal = 8.dp)
-                            .fillMaxHeight(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        listOf(
-                            0 to ("Bike" to Icons.Filled.Home),
-                            1 to ("Settings" to Icons.Filled.Settings),
-                        ).forEach { (index, pair) ->
-                            val (label, icon) = pair
-                            val isSelected = pagerState.currentPage == index
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                    ) {
-                                        scope.launch { pagerState.animateScrollToPage(index) }
-                                    },
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    Icon(
-                                        icon,
-                                        contentDescription = label,
-                                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                    AnimatedVisibility(visible = isSelected) {
-                                        Text(
-                                            label,
-                                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        )
-                                    }
-                                }
+                                onSelectPage(index)
+                            },
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                icon,
+                                contentDescription = label,
+                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            AnimatedVisibility(visible = isSelected) {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
                             }
                         }
                     }
@@ -316,7 +327,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun PodScreen(modifier: Modifier = Modifier) {
     val state by Session.linkState.collectAsState()
-    val s by Session.settings.collectAsState()
     val context = LocalContext.current
     val enableBt = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
