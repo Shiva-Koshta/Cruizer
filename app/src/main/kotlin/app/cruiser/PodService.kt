@@ -263,10 +263,14 @@ class PodService : Service() {
     }
 
     private fun markPaired() {
+        val mac = link.deviceAddress.value ?: return
         getSharedPreferences("pod", Context.MODE_PRIVATE).edit()
-            .putString(KEY_MAC, link.deviceAddress.value)
+            .putString(KEY_MAC, mac)
             .putBoolean(KEY_PAIRED, true)
             .apply()
+        if (Session.savedPods.value.none { it.mac == mac }) {
+            Session.savePod(mac, "Tripper Pod")
+        }
     }
 
     fun forgetPod() {
@@ -325,7 +329,6 @@ class PodService : Service() {
 
     private fun renderNavFrame(turn: TurnUpdate, night: Boolean, now: Long) {
         val s = Session.settings.value
-        val radar = Session.radar.value?.takeIf { s.radarEnabled && it in 1..300 }
         // Roundabout: per-exit icons are hardware-observed (Likely). RE canonically
         // sends the base roundabout icon; the playground verifies which the Pod draws.
         val maneuver = when {
@@ -342,14 +345,26 @@ class PodService : Service() {
                 ?.let { PodProtocol.Bottom.Remaining(it) }
             Session.BottomMode.TOTAL -> turn.routeRemainingM
                 ?.let { PodProtocol.Bottom.Total(it, s.imperial) }
+            Session.BottomMode.CYCLE -> {
+                val available = listOfNotNull(
+                    turn.arrivalSecondsFromNow?.let { PodProtocol.Bottom.Arrival(it, s.twelveHourClock) },
+                    turn.remainingSeconds?.let { PodProtocol.Bottom.Remaining(it) },
+                    turn.routeRemainingM?.let { PodProtocol.Bottom.Total(it, s.imperial) },
+                )
+                if (available.isNotEmpty()) {
+                    val interval = s.cycleIntervalSeconds.coerceAtLeast(1)
+                    val idx = ((now / 1000) / interval % available.size).toInt()
+                    available[idx]
+                } else null
+            }
         } ?: PodProtocol.Bottom.None
         val f = PodProtocol.navFrame(
             maneuver = maneuver,
             distanceM = turn.distanceM ?: 0,
             imperial = s.imperial,
-            next = if (radar != null) Icons.DEPART.code else turn.next?.nextCode()?.takeIf { it >= 0 },
+            next = turn.next?.nextCode()?.takeIf { it >= 0 },
             nextDistanceM = turn.nextDistanceM,
-            bottom = if (radar != null) PodProtocol.Bottom.Total(radar, s.imperial) else bottom,
+            bottom = bottom,
             night = night,
             exit = if (turn.exit != null) turn.exit else 0,
         )

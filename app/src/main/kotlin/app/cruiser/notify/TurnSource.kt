@@ -2,6 +2,8 @@ package app.cruiser.notify
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import app.cruiser.Session
@@ -29,6 +31,9 @@ class TurnSource : NotificationListenerService() {
         }
     }
 
+    private val handler = Handler(Looper.getMainLooper())
+    private var pendingClear: Runnable? = null
+
     override fun onListenerConnected() {
         if (app.cruiser.BuildConfig.DEBUG) {
             android.util.Log.i(
@@ -41,11 +46,13 @@ class TurnSource : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        pendingClear?.let { handler.removeCallbacks(it); pendingClear = null }
         Session.navActive.value = false
         Session.postTurn(null)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        pendingClear?.let { handler.removeCallbacks(it); pendingClear = null }
         tryParse(sbn)
     }
 
@@ -55,10 +62,22 @@ class TurnSource : NotificationListenerService() {
         // remaining ones before declaring the route over.
         val next = activeNotifications.filter { it.key != sbn.key }.firstOrNull(::isNavSource)
         if (next != null) {
+            pendingClear?.let { handler.removeCallbacks(it); pendingClear = null }
             tryParse(next)
         } else {
-            Session.navActive.value = false
-            Session.postTurn(null)
+            // Debounce teardown: Google Maps rapidly removes and reposts notifications
+            // during turn updates — avoid flashing back to the clock face.
+            pendingClear?.let { handler.removeCallbacks(it) }
+            val clear = Runnable {
+                pendingClear = null
+                val stillActive = activeNotifications.any(::isNavSource)
+                if (!stillActive) {
+                    Session.navActive.value = false
+                    Session.postTurn(null)
+                }
+            }
+            pendingClear = clear
+            handler.postDelayed(clear, 2500)
         }
     }
 
@@ -95,7 +114,6 @@ class TurnSource : NotificationListenerService() {
 
         when (val p = NavTextParser.parse(body)) {
             is NavTextParser.Parsed.Turn -> {
-                Session.postRadar(null) // a fresh turn means the camera alert is stale
                 if (p.update.ended) Session.navActive.value = false // arrived: route over
                 val update = if (iconKind != null && iconKind != app.cruiser.proto.TurnKind.UNKNOWN) {
                     p.update.copy(kind = iconKind)
@@ -104,7 +122,7 @@ class TurnSource : NotificationListenerService() {
                 }
                 Session.postTurn(update)
             }
-            is NavTextParser.Parsed.Camera -> Session.postRadar(p.meters)
+            is NavTextParser.Parsed.Camera -> {}
             NavTextParser.Parsed.Idle -> {}
         }
     }

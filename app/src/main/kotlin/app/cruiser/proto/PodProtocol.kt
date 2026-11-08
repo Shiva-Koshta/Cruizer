@@ -212,11 +212,11 @@ object PodProtocol {
         }
     )
 
-    /** "Route started" splash: 0x45 as the large icon, shown ~2 s when navigation begins. */
-    fun routeStartedFrame(night: Boolean): ByteArray = withCrc(
+    /** Status overlay screens: route started (0x45), low battery (0x44), re-routing (0x1C). */
+    fun statusFrame(icon: Icons, night: Boolean): ByteArray = withCrc(
         build18 {
             it[0] = 0x10; it[1] = 0x11
-            it[2] = Icons.ROUTE_STARTED.code.toByte()
+            it[2] = icon.code.toByte()
             it[5] = 0x01
             it[6] = (if (night) 1 else 0).toByte()
             it[7] = 0xFF.toByte()
@@ -224,4 +224,8 @@ object PodProtocol {
             it[11] = 0xFF.toByte(); it[12] = 0xFF.toByte(); it[13] = 0xFF.toByte()
         }
     )
+
+    fun routeStartedFrame(night: Boolean): ByteArray = statusFrame(Icons.ROUTE_STARTED, night)
+    fun lowBatteryFrame(night: Boolean): ByteArray = statusFrame(Icons.LOW_BATTERY, night)
+    fun reRouteFrame(night: Boolean): ByteArray = statusFrame(Icons.RE_ROUTE, night)
 }

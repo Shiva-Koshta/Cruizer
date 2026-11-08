@@ -79,6 +79,7 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                         Session.BottomMode.TOTAL to "distance",
                         Session.BottomMode.REMAINING to "time left",
                         Session.BottomMode.ARRIVAL to "arrival",
+                        Session.BottomMode.CYCLE to "cycle",
                     ).forEach { (m, label) ->
                         FilterChip(
                             selected = s.bottomMode == m,
@@ -88,9 +89,19 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                     }
                 }
 
-                SettingSwitch("Radar (speed cameras, best effort)", s.radarEnabled) { v ->
-                    Session.updateSettings { it.copy(radarEnabled = v) }
+                if (s.bottomMode == Session.BottomMode.CYCLE) {
+                    Text("Cycle interval", style = MaterialTheme.typography.bodySmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(3 to "3s", 5 to "5s", 10 to "10s", 15 to "15s").forEach { (sec, label) ->
+                            FilterChip(
+                                selected = s.cycleIntervalSeconds == sec,
+                                onClick = { Session.updateSettings { it.copy(cycleIntervalSeconds = sec) } },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
                 }
+
                 SettingSwitch("12-hour clock", s.twelveHourClock) { v ->
                     Session.updateSettings { it.copy(twelveHourClock = v) }
                 }

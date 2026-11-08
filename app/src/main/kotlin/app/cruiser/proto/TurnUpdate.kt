@@ -22,7 +22,7 @@ enum class TurnKind {
     SHARP_LEFT, SHARP_RIGHT, KEEP_LEFT, KEEP_RIGHT, U_TURN,
     MERGE_LEFT, MERGE_RIGHT, FORK_LEFT, FORK_RIGHT,
     OFF_RAMP_LEFT, OFF_RAMP_RIGHT, ON_RAMP, ROUNDABOUT,
-    FERRY, DESTINATION, UNKNOWN;
+    FERRY, DESTINATION, RE_ROUTE, UNKNOWN;
 
     /** Map to the Pod icon; for "keep" we send the dedicated lane icons as the main icon. */
     fun code(): Int = when (this) {
@@ -47,6 +47,7 @@ enum class TurnKind {
         ROUNDABOUT -> Icons.ROUNDABOUT_CW.code // base icon; exitCode() is used when the ordinal is known
         FERRY -> Icons.FERRY_BOAT.code
         DESTINATION -> Icons.DESTINATION.code
+        RE_ROUTE -> Icons.RE_ROUTE.code
         UNKNOWN -> -1
     }
 

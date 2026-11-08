@@ -89,7 +89,7 @@ fun PlaygroundScreen(onBack: () -> Unit) {
         val bottom = when (s.bottomMode) {
             Session.BottomMode.TOTAL -> PodProtocol.Bottom.Total(15200, s.imperial)
             Session.BottomMode.REMAINING -> PodProtocol.Bottom.Remaining(2 * 3600 + 5 * 60)
-            Session.BottomMode.ARRIVAL -> PodProtocol.Bottom.Arrival(10 * 60, s.twelveHourClock)
+            Session.BottomMode.ARRIVAL, Session.BottomMode.CYCLE -> PodProtocol.Bottom.Arrival(10 * 60, s.twelveHourClock)
         }
         val icon = if (kind == TurnKind.ROUNDABOUT && exit > 0) {
             app.cruiser.proto.Icons.exitCode(exit)

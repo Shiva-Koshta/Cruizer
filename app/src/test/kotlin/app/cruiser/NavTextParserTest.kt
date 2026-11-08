@@ -146,6 +146,13 @@ class NavTextParserTest {
     }
 
     @Test
+    fun reRouteDetected() {
+        val p = NavTextParser.parse("Recalculating route in 500 m") as Parsed.Turn
+        assertEquals(TurnKind.RE_ROUTE, p.update.kind)
+        assertEquals(500, p.update.distanceM)
+    }
+
+    @Test
     fun googleMapsThreePartSubTextWithEta() {
         // "13 min · 4.6 mi · 11:55 ETA" parsed at 11:00 AM -> 55 min arrival
         val p = NavTextParser.parse("Turn left\n13 min · 4.6 mi · 11:55 ETA", now(11, 0)) as Parsed.Turn

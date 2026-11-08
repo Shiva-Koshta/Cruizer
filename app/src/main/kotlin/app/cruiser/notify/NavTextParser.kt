@@ -73,6 +73,7 @@ object NavTextParser {
         TurnKind.ON_RAMP to listOf("on-ramp", "onramp"),
         TurnKind.FERRY to listOf("ferry"),
         TurnKind.DESTINATION to listOf("arrive", "destination"),
+        TurnKind.RE_ROUTE to listOf("re-routing", "rerouting", "recalculating", "finding new route"),
         TurnKind.LEFT to listOf("turn left", "left turn", "left onto", "left on ", "take the left", "left toward", ", left"),
         TurnKind.RIGHT to listOf("turn right", "right turn", "right onto", "right on ", "take the right", "right toward", ", right"),
         TurnKind.DEPART to listOf("go north", "go south", "go east", "go west", "head "),

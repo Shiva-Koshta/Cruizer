@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.cruiser.ble.LinkState
 import app.cruiser.proto.TurnUpdate
@@ -34,7 +35,8 @@ object Session {
     private const val KEY_NIGHT = "night_mode"
     private const val KEY_BOTTOM = "bottom_mode"
     private const val KEY_THEME = "theme_mode"
-    private const val KEY_RADAR = "radar_enabled"
+    private const val KEY_CYCLE_INTERVAL = "cycle_interval"
+    private const val KEY_SAVED_PODS = "saved_pods"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -57,11 +59,12 @@ object Session {
                             .getOrElse(p[intPreferencesKey(KEY_BOTTOM)] ?: 2) { BottomMode.ARRIVAL },
                         themeMode = ThemeMode.entries
                             .getOrElse(p[intPreferencesKey(KEY_THEME)] ?: 0) { ThemeMode.SYSTEM },
-                        radarEnabled = p[booleanPreferencesKey(KEY_RADAR)] ?: true,
+                        cycleIntervalSeconds = p[intPreferencesKey(KEY_CYCLE_INTERVAL)] ?: 5,
                         twelveHourClock = p[booleanPreferencesKey("clock_12h")] ?: false,
                         imperial = p[booleanPreferencesKey("imperial")]
                             ?: Locale.getDefault().country in setOf("US", "GB", "LR", "MM"),
                     )
+                    _savedPods.value = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
                 }
             }
         }
@@ -70,18 +73,23 @@ object Session {
     enum class NightMode { DAY, NIGHT, AUTO }
 
     /** What the Pod's bottom line shows while navigating. */
-    enum class BottomMode { TOTAL, REMAINING, ARRIVAL }
+    enum class BottomMode { TOTAL, REMAINING, ARRIVAL, CYCLE }
 
     /** The app's own theme; independent of the night-mode setting. */
     enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
     enum class PhoneCall { NONE, INCOMING, ACTIVE }
 
+    data class SavedPod(
+        val mac: String,
+        val nickname: String,
+    )
+
     data class Settings(
         val nightMode: NightMode = NightMode.AUTO,
         val bottomMode: BottomMode = BottomMode.ARRIVAL,
         val themeMode: ThemeMode = ThemeMode.SYSTEM,
-        val radarEnabled: Boolean = true,
+        val cycleIntervalSeconds: Int = 5,
         val twelveHourClock: Boolean = false,
         /** imperial feet/miles; default metric (Indian standard units) */
         val imperial: Boolean = false,
@@ -89,6 +97,9 @@ object Session {
 
     private val _settings = MutableStateFlow(Settings())
     val settings: StateFlow<Settings> = _settings
+
+    private val _savedPods = MutableStateFlow<List<SavedPod>>(emptyList())
+    val savedPods: StateFlow<List<SavedPod>> = _savedPods
 
     fun updateSettings(f: (Settings) -> Settings) {
         val next = f(_settings.value)
@@ -98,11 +109,44 @@ object Session {
                 it[intPreferencesKey(KEY_NIGHT)] = next.nightMode.ordinal
                 it[intPreferencesKey(KEY_BOTTOM)] = next.bottomMode.ordinal
                 it[intPreferencesKey(KEY_THEME)] = next.themeMode.ordinal
-                it[booleanPreferencesKey(KEY_RADAR)] = next.radarEnabled
+                it[intPreferencesKey(KEY_CYCLE_INTERVAL)] = next.cycleIntervalSeconds
                 it[booleanPreferencesKey("clock_12h")] = next.twelveHourClock
                 it[booleanPreferencesKey("imperial")] = next.imperial
             }
         }
+    }
+
+    fun savePod(mac: String, nickname: String) {
+        val trimmed = nickname.trim().ifEmpty { "Tripper Pod" }
+        val current = _savedPods.value.filter { it.mac != mac }
+        val updated = current + SavedPod(mac, trimmed)
+        _savedPods.value = updated
+        persistSavedPods(updated)
+    }
+
+    fun removeSavedPod(mac: String) {
+        val updated = _savedPods.value.filter { it.mac != mac }
+        _savedPods.value = updated
+        persistSavedPods(updated)
+    }
+
+    private fun persistSavedPods(pods: List<SavedPod>) {
+        scope.launch {
+            store?.edit {
+                it[stringPreferencesKey(KEY_SAVED_PODS)] = pods.joinToString("\n") { p -> "${p.mac}|${p.nickname}" }
+            }
+        }
+    }
+
+    private fun parseSavedPods(raw: String?): List<SavedPod> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.lineSequence()
+            .mapNotNull { line ->
+                val parts = line.split('|')
+                if (parts.size >= 2 && parts[0].isNotBlank()) SavedPod(parts[0].trim(), parts[1].trim())
+                else null
+            }
+            .toList()
     }
 
     /** Latest parsed turn from any nav app; null when no active route. */
@@ -143,14 +187,6 @@ object Session {
 
     fun postCall(c: PhoneCall) {
         _phoneCall.value = c
-    }
-
-    /** Best-effort speed-camera event in meters (null when none active). */
-    private val _radar = MutableStateFlow<Int?>(null)
-    val radar: StateFlow<Int?> = _radar
-
-    fun postRadar(meters: Int?) {
-        _radar.value = meters
     }
 
     /** Debug raw-notification capture (Settings tab on debug builds), newest first. */

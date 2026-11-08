@@ -121,7 +121,6 @@ object ComapsSource {
                 val update = row?.let { turnUpdate(it.car, it.ped, it.distToTurn, it.distToTarget, it.timeSeconds, it.exitNum) }
                 when {
                     update != null -> {
-                        Session.postRadar(null)
                         Session.postTurn(update)
                         owned = true
                     }
