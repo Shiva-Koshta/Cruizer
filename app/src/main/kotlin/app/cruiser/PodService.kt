@@ -139,6 +139,9 @@ class PodService : Service() {
             hasPerm(Manifest.permission.BLUETOOTH_SCAN)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        intent?.getStringExtra("extra_toast")?.let { msg ->
+            android.widget.Toast.makeText(applicationContext, msg, android.widget.Toast.LENGTH_SHORT).show()
+        }
         if (intent?.getBooleanExtra(EXTRA_SCAN_NEW, false) == true) {
             link.deviceAddress.value = null
             if (bleReady()) link.disconnect()
