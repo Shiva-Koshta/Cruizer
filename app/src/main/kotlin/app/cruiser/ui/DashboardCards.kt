@@ -30,6 +30,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -225,15 +226,7 @@ private fun NavigationPreviewSection(turn: TurnUpdate?, imperial: Boolean) {
 
 @Composable
 private fun LiveRideMetricsSection(ride: Session.LiveRide, settings: Session.Settings) {
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(ride.startedAt) {
-        while (true) {
-            delay(1000)
-            now = System.currentTimeMillis()
-        }
-    }
-
-    val elapsedSec = ((now - ride.startedAt) / 1000).coerceAtLeast(0)
+    val elapsedSec = ride.elapsedSeconds
     val distStr = if (!settings.imperial) {
         "%.1f km".format(Locale.US, ride.distanceM / 1000f)
     } else {
@@ -250,7 +243,8 @@ private fun LiveRideMetricsSection(ride: Session.LiveRide, settings: Session.Set
         "${(ride.avgSpeedKmh * 0.621371).toInt()} mph"
     }
 
-    val kmpl = if (settings.bikeModel == Session.BikeModel.CUSTOM) settings.customKmpl else settings.bikeModel.kmpl
+    val bike = Session.activeBike()
+    val kmpl = if (bike?.model == Session.BikeModel.CUSTOM) bike.customKmpl else (bike?.model?.kmpl ?: settings.bikeModel.kmpl)
     val liters = (ride.distanceM / 1000.0) / kmpl.coerceAtLeast(1.0)
     val fuelStr = if (!settings.imperial) {
         "%.2f L".format(Locale.US, liters)
@@ -371,7 +365,7 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                 )
                                 Text(
-                                    pod.mac,
+                                    "${pod.model.label.substringBefore('(').trim()} · ${pod.mac}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -384,7 +378,7 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
                                 IconButton(onClick = { renamingPod = pod }) {
                                     Icon(
                                         Icons.Filled.Edit,
-                                        contentDescription = "Rename",
+                                        contentDescription = "Edit Bike",
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp),
                                     )
@@ -413,21 +407,58 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
     }
 
     renamingPod?.let { pod ->
-        var newName by remember { mutableStateOf(pod.nickname) }
+        var newName by remember(pod) { mutableStateOf(pod.nickname) }
+        var selectedModel by remember(pod) { mutableStateOf(pod.model) }
+        var customKmpl by remember(pod) { mutableStateOf(pod.customKmpl.toString()) }
+
         AlertDialog(
             onDismissRequest = { renamingPod = null },
-            title = { Text("Rename Bike") },
+            title = { Text("Edit Bike Profile") },
             text = {
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text("Nickname") },
-                    singleLine = true,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("Bike Nickname") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Text("Engine Model", style = MaterialTheme.typography.labelMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Session.BikeModel.entries.forEach { m ->
+                            FilterChip(
+                                selected = selectedModel == m,
+                                onClick = { selectedModel = m },
+                                label = {
+                                    val short = when (m) {
+                                        Session.BikeModel.J_SERIES_350 -> "350cc"
+                                        Session.BikeModel.TWINS_650 -> "650cc"
+                                        Session.BikeModel.SHERPA_450 -> "450cc"
+                                        Session.BikeModel.HIMALAYAN_411 -> "411cc"
+                                        Session.BikeModel.CUSTOM -> "Custom"
+                                    }
+                                    Text(short)
+                                },
+                            )
+                        }
+                    }
+
+                    if (selectedModel == Session.BikeModel.CUSTOM) {
+                        OutlinedTextField(
+                            value = customKmpl,
+                            onValueChange = { customKmpl = it },
+                            label = { Text("Mileage (km/L)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(onClick = {
-                    Session.savePod(pod.mac, newName)
+                    val kmplVal = customKmpl.toDoubleOrNull() ?: selectedModel.kmpl
+                    Session.savePod(pod.mac, newName, selectedModel, kmplVal)
                     renamingPod = null
                 }) {
                     Text("Save")

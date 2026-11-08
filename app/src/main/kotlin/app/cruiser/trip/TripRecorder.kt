@@ -67,12 +67,14 @@ class TripRecorder(private val context: Context) : LocationListener {
         persist.execute {
             try {
                 file?.close()
+                val bike = Session.activeBike()
                 TripStore.save(
                     context,
                     Trip(
                         id = trip.startedAt,
                         endedAt = System.currentTimeMillis(),
                         distanceM = trip.distanceM,
+                        bikeName = bike?.nickname,
                     ),
                 )
             } finally {

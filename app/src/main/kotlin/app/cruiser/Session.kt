@@ -105,6 +105,8 @@ object Session {
     data class SavedPod(
         val mac: String,
         val nickname: String,
+        val model: BikeModel = BikeModel.J_SERIES_350,
+        val customKmpl: Double = 36.0,
     )
 
     data class Settings(
@@ -126,7 +128,9 @@ object Session {
     val savedPods: StateFlow<List<SavedPod>> = _savedPods
 
     data class LiveRide(
-        val startedAt: Long = System.currentTimeMillis(),
+        val isActive: Boolean = false,
+        val startedAt: Long? = null,
+        val elapsedSeconds: Long = 0L,
         val distanceM: Int = 0,
         val currentSpeedKmh: Int = 0,
         val avgSpeedKmh: Int = 0,
@@ -140,16 +144,27 @@ object Session {
     fun updateLiveLocation(location: Location) {
         lastLat = location.latitude
         lastLon = location.longitude
+        val isConnected = linkState.value == LinkState.CONNECTED
+        val speedKmh = Math.round(location.speed * 3.6f).coerceAtLeast(0)
+        val current = _liveRide.value
+        val isMoving = speedKmh > 1
+        if (!isConnected && !isMoving && !navActive.value) {
+            lastLiveLoc = location
+            return
+        }
+        val started = current.startedAt ?: System.currentTimeMillis()
+        val elapsed = ((System.currentTimeMillis() - started) / 1000).coerceAtLeast(0)
         val prev = lastLiveLoc
         lastLiveLoc = location
         val delta = prev?.distanceTo(location) ?: 0f
         val add = if (prev != null && delta in 0.4f..150f) Math.round(delta) else 0
-        val current = _liveRide.value
         val newDist = current.distanceM + add
-        val speedKmh = Math.round(location.speed * 3.6f).coerceAtLeast(0)
-        val elapsedHours = (System.currentTimeMillis() - current.startedAt) / 3600000.0
+        val elapsedHours = elapsed / 3600.0
         val avgSpeed = if (elapsedHours > 0.0005) Math.round((newDist / 1000.0) / elapsedHours).toInt() else speedKmh
         _liveRide.value = current.copy(
+            isActive = true,
+            startedAt = started,
+            elapsedSeconds = elapsed,
             distanceM = newDist,
             currentSpeedKmh = speedKmh,
             avgSpeedKmh = avgSpeed,
@@ -159,7 +174,7 @@ object Session {
 
     fun resetLiveRide() {
         lastLiveLoc = null
-        _liveRide.value = LiveRide(startedAt = System.currentTimeMillis())
+        _liveRide.value = LiveRide()
     }
 
     fun updateSettings(f: (Settings) -> Settings) {
@@ -179,10 +194,10 @@ object Session {
         }
     }
 
-    fun savePod(mac: String, nickname: String) {
+    fun savePod(mac: String, nickname: String, model: BikeModel = BikeModel.J_SERIES_350, customKmpl: Double = 36.0) {
         val trimmed = nickname.trim().ifEmpty { "Tripper Pod" }
         val current = _savedPods.value.filter { it.mac != mac }
-        val updated = current + SavedPod(mac, trimmed)
+        val updated = current + SavedPod(mac, trimmed, model, customKmpl)
         _savedPods.value = updated
         persistSavedPods(updated)
     }
@@ -193,10 +208,19 @@ object Session {
         persistSavedPods(updated)
     }
 
+    fun activeBike(currentMac: String? = null): SavedPod? {
+        val pods = _savedPods.value
+        if (pods.isEmpty()) return null
+        return if (currentMac != null) pods.firstOrNull { it.mac == currentMac } ?: pods.first()
+        else pods.first()
+    }
+
     private fun persistSavedPods(pods: List<SavedPod>) {
         scope.launch {
             store?.edit {
-                it[stringPreferencesKey(KEY_SAVED_PODS)] = pods.joinToString("\n") { p -> "${p.mac}|${p.nickname}" }
+                it[stringPreferencesKey(KEY_SAVED_PODS)] = pods.joinToString("\n") { p ->
+                    "${p.mac}|${p.nickname}|${p.model.ordinal}|${p.customKmpl}"
+                }
             }
         }
     }
@@ -206,8 +230,15 @@ object Session {
         return raw.lineSequence()
             .mapNotNull { line ->
                 val parts = line.split('|')
-                if (parts.size >= 2 && parts[0].isNotBlank()) SavedPod(parts[0].trim(), parts[1].trim())
-                else null
+                if (parts.size >= 2 && parts[0].isNotBlank()) {
+                    val mac = parts[0].trim()
+                    val nickname = parts[1].trim()
+                    val model = parts.getOrNull(2)?.toIntOrNull()?.let { ord ->
+                        BikeModel.entries.getOrNull(ord)
+                    } ?: BikeModel.J_SERIES_350
+                    val kmpl = parts.getOrNull(3)?.toDoubleOrNull() ?: model.kmpl
+                    SavedPod(mac, nickname, model, kmpl)
+                } else null
             }
             .toList()
     }

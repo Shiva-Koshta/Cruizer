@@ -10,15 +10,19 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -135,33 +139,69 @@ class MainActivity : ComponentActivity() {
         val current by page.collectAsState()
         Scaffold(
             modifier = modifier,
-            // The one owner of system-bar insets: every tab gets `pad` from here.
             contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
-            NavigationBar {
-                listOf(
-                    Page.POD to "Pod",
-                    Page.TRIPS to "Trips",
-                    Page.SETTINGS to "Settings",
-                ).forEach { (p, label) ->
-                    NavigationBarItem(
-                        selected = current == p,
-                        onClick = { page.value = p },
-                        icon = {
-                            Icon(
-                                when (p) {
-                                    Page.POD -> Icons.Filled.Home
-                                    Page.TRIPS -> Icons.Filled.LocationOn
-                                    else -> Icons.Filled.Settings
-                                },
-                                contentDescription = label,
-                            )
-                        },
-                        label = { Text(label) },
-                    )
+                if (current != Page.PLAYGROUND) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 24.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.95f),
+                            tonalElevation = 8.dp,
+                            shadowElevation = 8.dp,
+                            modifier = Modifier.height(62.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(horizontal = 8.dp)
+                                    .fillMaxHeight(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                listOf(
+                                    Page.POD to ("Bike" to Icons.Filled.Home),
+                                    Page.TRIPS to ("Trips" to Icons.Filled.LocationOn),
+                                    Page.SETTINGS to ("Settings" to Icons.Filled.Settings),
+                                ).forEach { (p, pair) ->
+                                    val (label, icon) = pair
+                                    val isSelected = current == p
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                        modifier = Modifier.clickable { page.value = p },
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            Icon(
+                                                icon,
+                                                contentDescription = label,
+                                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                            if (isSelected) {
+                                                Text(
+                                                    label,
+                                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-            }
-        }) { pad ->
+            },
+        ) { pad ->
             Column(
                 Modifier
                     .fillMaxSize()
