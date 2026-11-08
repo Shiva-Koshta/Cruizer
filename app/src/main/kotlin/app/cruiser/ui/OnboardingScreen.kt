@@ -47,7 +47,10 @@ import androidx.core.content.ContextCompat
  * Re-checks live; shows which permissions are Required vs Optional.
  */
 @Composable
-fun OnboardingScreen(modifier: Modifier = Modifier) {
+fun OnboardingScreen(
+    onFinish: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     @Suppress("UNUSED_EXPRESSION")
     MainActivity.gate.collectAsState().value // reading the gate makes resume re-check permissions
@@ -166,11 +169,9 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(8.dp))
 
-        // Get Started Button: Only enabled when all required permissions are satisfied
+        // Finish Setup Button: Only enabled when all required permissions are satisfied
         Button(
-            onClick = {
-                MainActivity.gate.value = MainActivity.gate.value + 1
-            },
+            onClick = onFinish,
             enabled = allRequiredGranted,
             modifier = Modifier
                 .fillMaxWidth()
@@ -181,7 +182,7 @@ fun OnboardingScreen(modifier: Modifier = Modifier) {
             ),
         ) {
             Text(
-                "Get Started",
+                "Finish Setup 🏍️",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             )
         }

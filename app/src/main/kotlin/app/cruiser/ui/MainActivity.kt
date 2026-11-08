@@ -140,8 +140,13 @@ class MainActivity : ComponentActivity() {
                 val g by gate.collectAsState()
                 @Suppress("UNUSED_EXPRESSION")
                 g // re-check on gate update
-                if (!isReady()) {
-                    OnboardingScreen(Modifier.fillMaxSize())
+                val onboarded by Session.onboardingCompleted.collectAsState()
+                val ready = isReady()
+                if (!onboarded || !ready) {
+                    OnboardingScreen(
+                        onFinish = { Session.completeOnboarding() },
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 } else {
                     Tabs()
                 }
@@ -500,18 +505,32 @@ private fun PodScreen(modifier: Modifier = Modifier) {
 @Composable
 private fun PinDialog() {
     var pin by remember { mutableStateOf("") }
+    val rejected by Session.pinRejected.collectAsState()
     AlertDialog(
-        onDismissRequest = { Session.awaitingPin.value = false },
+        onDismissRequest = {
+            Session.awaitingPin.value = false
+            Session.pinRejected.value = false
+        },
         title = { Text("Pod PIN") },
         text = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Type the 6 digits shown on the Tripper Pod.")
-                Spacer(Modifier.height(8.dp))
+                if (rejected) {
+                    Text(
+                        "Incorrect PIN. Please re-enter the 6 digits on your Pod.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 OutlinedTextField(
                     value = pin,
-                    onValueChange = { v -> pin = v.filter { it.isDigit() }.take(6) },
+                    onValueChange = { v ->
+                        Session.pinRejected.value = false
+                        pin = v.filter { it.isDigit() }.take(6)
+                    },
                     label = { Text("PIN") },
                     singleLine = true,
+                    isError = rejected,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 )
             }
@@ -522,7 +541,12 @@ private fun PinDialog() {
                 onClick = { Session.pinInput.tryEmit(pin) },
             ) { Text("Send") }
         },
-        dismissButton = { TextButton(onClick = { Session.awaitingPin.value = false }) { Text("Cancel") } },
+        dismissButton = {
+            TextButton(onClick = {
+                Session.awaitingPin.value = false
+                Session.pinRejected.value = false
+            }) { Text("Cancel") }
+        },
     )
 }
 
