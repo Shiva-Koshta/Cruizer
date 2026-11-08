@@ -8,20 +8,26 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.cruiser.BuildConfig
 import app.cruiser.Session
@@ -107,6 +113,31 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                 }
                 SettingSwitch("Imperial units", s.imperial) { v ->
                     Session.updateSettings { it.copy(imperial = v) }
+                }
+
+                Text("Motorcycle Profile & Mileage", style = MaterialTheme.typography.titleSmall)
+                Session.BikeModel.entries.forEach { model ->
+                    FilterChip(
+                        selected = s.bikeModel == model,
+                        onClick = { Session.updateSettings { it.copy(bikeModel = model) } },
+                        label = {
+                            val mileageStr = if (!s.imperial) "${model.kmpl.toInt()} km/L" else "${(model.kmpl * 2.35215).toInt()} mpg"
+                            Text(if (model == Session.BikeModel.CUSTOM) model.label else "${model.label} ($mileageStr)")
+                        },
+                    )
+                }
+                if (s.bikeModel == Session.BikeModel.CUSTOM) {
+                    var customText by remember(s.customKmpl) { mutableStateOf(s.customKmpl.toString()) }
+                    OutlinedTextField(
+                        value = customText,
+                        onValueChange = { str ->
+                            customText = str
+                            str.toDoubleOrNull()?.let { v -> Session.updateSettings { it.copy(customKmpl = v) } }
+                        },
+                        label = { Text(if (!s.imperial) "Custom Mileage (km/L)" else "Custom Mileage (mpg)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
                 }
             }
         }

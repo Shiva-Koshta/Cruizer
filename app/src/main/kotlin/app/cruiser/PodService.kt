@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.IBinder
@@ -50,6 +51,7 @@ class PodService : Service() {
         const val ACTION_STOP = "app.cruiser.STOP"
         const val ACTION_FORGET = "app.cruiser.FORGET"
         const val EXTRA_MAC = "extra_mac"
+        const val EXTRA_SCAN_NEW = "extra_scan_new"
         private const val CHANNEL_ID = "pod"
         private const val NOTIF_ID = 42
         private const val KEY_MAC = "pod_mac"
@@ -165,16 +167,22 @@ class PodService : Service() {
             hasPerm(Manifest.permission.BLUETOOTH_SCAN)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val targetMac = intent?.getStringExtra(EXTRA_MAC)
-        if (targetMac != null) {
-            link.deviceAddress.value = targetMac
+        if (intent?.getBooleanExtra(EXTRA_SCAN_NEW, false) == true) {
+            link.deviceAddress.value = null
+            if (bleReady()) link.disconnect()
             link.scanOrConnect(bleReady())
-        } else if (intent?.action == ACTION_START) {
-            link.scanOrConnect(bleReady())
+        } else {
+            val targetMac = intent?.getStringExtra(EXTRA_MAC)
+            if (targetMac != null) {
+                link.deviceAddress.value = targetMac
+                link.scanOrConnect(bleReady())
+            } else if (intent?.action == ACTION_START) {
+                link.scanOrConnect(bleReady())
+            }
         }
         when (intent?.action) {
             ACTION_STOP -> stopSelf()
-            ACTION_FORGET -> forgetPod(targetMac)
+            ACTION_FORGET -> forgetPod(intent?.getStringExtra(EXTRA_MAC))
         }
         return START_STICKY
     }
@@ -185,6 +193,7 @@ class PodService : Service() {
         unregisterPhoneState()
         recorder.stopTrip()
         recorder.stopListening()
+        stopLiveLocation()
         link.disconnect()
         link.closeServer()
         link.unwatchAdapterState()
@@ -204,8 +213,17 @@ class PodService : Service() {
             Session.linkState.value = st
             if (BuildConfig.DEBUG) Log.i("CruiserNav", "link state → $st")
             updateForeground(st)
-            if (st == LinkState.CONNECTED) handshake()
+            if (st == LinkState.CONNECTED) {
+                startLiveLocation()
+                link.deviceAddress.value?.let { mac ->
+                    if (Session.savedPods.value.none { p -> p.mac == mac }) {
+                        Session.savePod(mac, "My Bike")
+                    }
+                }
+                handshake()
+            }
             if (st == LinkState.DISCONNECTED) {
+                stopLiveLocation()
                 // Leaving the link (voluntary or watchdog) resets the Pod's screen side.
                 lastFrameSentAt = 0
                 sentSplash = false
@@ -397,6 +415,32 @@ class PodService : Service() {
         }
     }
 
+    private val liveLocationListener = object : LocationListener {
+        override fun onLocationChanged(loc: Location) {
+            Session.updateLiveLocation(loc)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startLiveLocation() {
+        if (!hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)) return
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        lm.allProviders.forEach { p ->
+            try {
+                lm.requestLocationUpdates(p, 1000L, 0f, liveLocationListener, mainLooper)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun stopLiveLocation() {
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        try {
+            lm.removeUpdates(liveLocationListener)
+        } catch (_: Exception) {
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private fun refreshLocation() {
         if (!hasPerm(Manifest.permission.ACCESS_COARSE_LOCATION)) return
@@ -458,7 +502,12 @@ class PodService : Service() {
     private fun restorePairedAddress() {
         val mac = applicationContext.getSharedPreferences("pod", Context.MODE_PRIVATE)
             .getString(KEY_MAC, null)
-        if (mac != null) link.deviceAddress.tryEmit(mac)
+        if (mac != null) {
+            link.deviceAddress.tryEmit(mac)
+            if (Session.savedPods.value.none { it.mac == mac }) {
+                Session.savePod(mac, "My Bike")
+            }
+        }
     }
 
     // ------------------------------------------------------------- notification

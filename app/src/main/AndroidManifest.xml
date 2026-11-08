@@ -42,7 +42,9 @@
 
         <activity
             android:exported="true"
-            android:name=".ui.MainActivity">
+            android:name=".ui.MainActivity"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

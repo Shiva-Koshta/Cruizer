@@ -373,6 +373,13 @@ internal fun Context.podStart(mac: String? = null) {
     ContextCompat.startForegroundService(this, intent)
 }
 
+internal fun Context.podScanNew() {
+    Session.linkState.value = LinkState.SCANNING
+    val intent = Intent(this, PodService::class.java).setAction(PodService.ACTION_START)
+    intent.putExtra(PodService.EXTRA_SCAN_NEW, true)
+    ContextCompat.startForegroundService(this, intent)
+}
+
 internal fun Context.podStop() {
     Session.linkState.value = LinkState.DISCONNECTED
     startService(Intent(this, PodService::class.java).setAction(PodService.ACTION_STOP))

@@ -67,8 +67,7 @@ import java.util.Locale
  */
 @Composable
 fun LiveTripCard(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val trip by Session.trip.collectAsState()
+    val liveRide by Session.liveRide.collectAsState()
     val turn by Session.currentTurn.collectAsState()
     val navActive by Session.navActive.collectAsState()
     val settings by Session.settings.collectAsState()
@@ -106,30 +105,8 @@ fun LiveTripCard(modifier: Modifier = Modifier) {
                     )
                 }
 
-                if (trip != null) {
-                    Surface(
-                        shape = CircleShape,
-                        color = Color(0xFF2E7D32).copy(alpha = 0.15f),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF2E7D32)),
-                            )
-                            Text(
-                                "REC",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF2E7D32),
-                            )
-                        }
-                    }
+                TextButton(onClick = Session::resetLiveRide) {
+                    Text("Reset Trip")
                 }
             }
 
@@ -138,49 +115,11 @@ fun LiveTripCard(modifier: Modifier = Modifier) {
                 NavigationPreviewSection(turn = turn, imperial = settings.imperial)
             }
 
-            // Live GPS Ride Metrics (Distance, Elapsed Timer, Speed)
-            if (trip != null) {
-                TripMetricsSection(trip = trip!!, imperial = settings.imperial)
-                Button(
-                    onClick = { Session.tripCommand.value = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Text("End Ride Recording")
-                }
-            } else if (turn == null && !navActive) {
-                Text(
-                    "No active navigation or ride recording. Start navigation in Google Maps or CoMaps, or record GPS:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Button(
-                    onClick = {
-                        context.podStart()
-                        Session.tripCommand.value = true
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Start Ride Recording")
-                }
-            } else {
-                OutlinedButton(
-                    onClick = {
-                        context.podStart()
-                        Session.tripCommand.value = true
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Record This Ride")
-                }
-            }
+            // Live Automatic Ride Metrics (Distance, Time, Speed, Avg Speed, Fuel)
+            LiveRideMetricsSection(
+                ride = liveRide,
+                settings = settings,
+            )
         }
     }
 }
@@ -285,31 +224,63 @@ private fun NavigationPreviewSection(turn: TurnUpdate?, imperial: Boolean) {
 }
 
 @Composable
-private fun TripMetricsSection(trip: Session.TripState, imperial: Boolean) {
+private fun LiveRideMetricsSection(ride: Session.LiveRide, settings: Session.Settings) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(trip.startedAt) {
+    LaunchedEffect(ride.startedAt) {
         while (true) {
             delay(1000)
             now = System.currentTimeMillis()
         }
     }
 
-    val elapsedSec = ((now - trip.startedAt) / 1000).coerceAtLeast(0)
-    val distStr = if (!imperial) {
-        "%.2f km".format(Locale.US, trip.distanceM / 1000f)
+    val elapsedSec = ((now - ride.startedAt) / 1000).coerceAtLeast(0)
+    val distStr = if (!settings.imperial) {
+        "%.1f km".format(Locale.US, ride.distanceM / 1000f)
     } else {
-        "%.2f mi".format(Locale.US, trip.distanceM * 0.000621371f)
+        "%.1f mi".format(Locale.US, ride.distanceM * 0.000621371f)
     }
-    val speedKmh = ((trip.lastLoc?.speed ?: 0f) * 3.6f).toInt()
-    val speedStr = if (!imperial) "$speedKmh km/h" else "${(speedKmh * 0.621371).toInt()} mph"
+    val speedStr = if (!settings.imperial) {
+        "${ride.currentSpeedKmh} km/h"
+    } else {
+        "${(ride.currentSpeedKmh * 0.621371).toInt()} mph"
+    }
+    val avgSpeedStr = if (!settings.imperial) {
+        "${ride.avgSpeedKmh} km/h"
+    } else {
+        "${(ride.avgSpeedKmh * 0.621371).toInt()} mph"
+    }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        MetricTile("Distance", distStr)
-        MetricTile("Time", formatDuration(elapsedSec))
-        MetricTile("Speed", speedStr)
+    val kmpl = if (settings.bikeModel == Session.BikeModel.CUSTOM) settings.customKmpl else settings.bikeModel.kmpl
+    val liters = (ride.distanceM / 1000.0) / kmpl.coerceAtLeast(1.0)
+    val fuelStr = if (!settings.imperial) {
+        "%.2f L".format(Locale.US, liters)
+    } else {
+        "%.2f gal".format(Locale.US, liters * 0.264172)
+    }
+    val economyStr = if (!settings.imperial) {
+        "%.0f km/L".format(Locale.US, kmpl)
+    } else {
+        "%.0f mpg".format(Locale.US, kmpl * 2.35215)
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            MetricTile("Distance", distStr)
+            MetricTile("Duration", formatDuration(elapsedSec))
+            MetricTile("Speed", speedStr)
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            MetricTile("Avg Speed", avgSpeedStr)
+            MetricTile("Est. Fuel", fuelStr)
+            MetricTile("Economy", economyStr)
+        }
     }
 }
 
@@ -363,19 +334,20 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "My Tripper Pods",
+                    "My Bikes",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 )
-                Text(
-                    "${savedPods.size} saved",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                OutlinedButton(
+                    onClick = { context.podScanNew() },
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("+ Add Bike")
+                }
             }
 
             if (savedPods.isEmpty()) {
                 Text(
-                    "No bikes saved yet. Pair with your motorcycle's Tripper Pod and give it a nickname.",
+                    "No bikes saved yet. Turn your motorcycle ignition on and tap Connect or Add Bike.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

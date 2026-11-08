@@ -6,6 +6,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import android.location.Location
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -37,6 +39,8 @@ object Session {
     private const val KEY_THEME = "theme_mode"
     private const val KEY_CYCLE_INTERVAL = "cycle_interval"
     private const val KEY_SAVED_PODS = "saved_pods"
+    private const val KEY_BIKE_MODEL = "bike_model"
+    private const val KEY_CUSTOM_KMPL = "custom_kmpl"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -63,8 +67,18 @@ object Session {
                         twelveHourClock = p[booleanPreferencesKey("clock_12h")] ?: false,
                         imperial = p[booleanPreferencesKey("imperial")]
                             ?: Locale.getDefault().country in setOf("US", "GB", "LR", "MM"),
+                        bikeModel = BikeModel.entries
+                            .getOrElse(p[intPreferencesKey(KEY_BIKE_MODEL)] ?: 0) { BikeModel.J_SERIES_350 },
+                        customKmpl = p[doublePreferencesKey(KEY_CUSTOM_KMPL)] ?: 35.0,
                     )
-                    _savedPods.value = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
+                    var pods = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
+                    val rememberedMac = context.getSharedPreferences("pod", Context.MODE_PRIVATE)
+                        .getString("pod_mac", null)
+                    if (rememberedMac != null && pods.none { it.mac == rememberedMac }) {
+                        pods = pods + SavedPod(rememberedMac, "My Bike")
+                        persistSavedPods(pods)
+                    }
+                    _savedPods.value = pods
                 }
             }
         }
@@ -80,6 +94,14 @@ object Session {
 
     enum class PhoneCall { NONE, INCOMING, ACTIVE }
 
+    enum class BikeModel(val label: String, val kmpl: Double) {
+        J_SERIES_350("Royal Enfield 350cc (Meteor/Classic/Hunter)", 36.0),
+        TWINS_650("Royal Enfield 650cc (Interceptor/GT/Super Meteor)", 25.0),
+        SHERPA_450("Royal Enfield 450cc (Himalayan/Guerrilla)", 30.0),
+        HIMALAYAN_411("Royal Enfield 411cc (Himalayan/Scram)", 32.0),
+        CUSTOM("Custom Mileage", 35.0);
+    }
+
     data class SavedPod(
         val mac: String,
         val nickname: String,
@@ -93,6 +115,8 @@ object Session {
         val twelveHourClock: Boolean = false,
         /** imperial feet/miles; default metric (Indian standard units) */
         val imperial: Boolean = false,
+        val bikeModel: BikeModel = BikeModel.J_SERIES_350,
+        val customKmpl: Double = 35.0,
     )
 
     private val _settings = MutableStateFlow(Settings())
@@ -100,6 +124,43 @@ object Session {
 
     private val _savedPods = MutableStateFlow<List<SavedPod>>(emptyList())
     val savedPods: StateFlow<List<SavedPod>> = _savedPods
+
+    data class LiveRide(
+        val startedAt: Long = System.currentTimeMillis(),
+        val distanceM: Int = 0,
+        val currentSpeedKmh: Int = 0,
+        val avgSpeedKmh: Int = 0,
+        val maxSpeedKmh: Int = 0,
+    )
+
+    private val _liveRide = MutableStateFlow(LiveRide())
+    val liveRide: StateFlow<LiveRide> = _liveRide
+    private var lastLiveLoc: Location? = null
+
+    fun updateLiveLocation(location: Location) {
+        lastLat = location.latitude
+        lastLon = location.longitude
+        val prev = lastLiveLoc
+        lastLiveLoc = location
+        val delta = prev?.distanceTo(location) ?: 0f
+        val add = if (prev != null && delta in 0.4f..150f) Math.round(delta) else 0
+        val current = _liveRide.value
+        val newDist = current.distanceM + add
+        val speedKmh = Math.round(location.speed * 3.6f).coerceAtLeast(0)
+        val elapsedHours = (System.currentTimeMillis() - current.startedAt) / 3600000.0
+        val avgSpeed = if (elapsedHours > 0.0005) Math.round((newDist / 1000.0) / elapsedHours).toInt() else speedKmh
+        _liveRide.value = current.copy(
+            distanceM = newDist,
+            currentSpeedKmh = speedKmh,
+            avgSpeedKmh = avgSpeed,
+            maxSpeedKmh = maxOf(current.maxSpeedKmh, speedKmh),
+        )
+    }
+
+    fun resetLiveRide() {
+        lastLiveLoc = null
+        _liveRide.value = LiveRide(startedAt = System.currentTimeMillis())
+    }
 
     fun updateSettings(f: (Settings) -> Settings) {
         val next = f(_settings.value)
@@ -112,6 +173,8 @@ object Session {
                 it[intPreferencesKey(KEY_CYCLE_INTERVAL)] = next.cycleIntervalSeconds
                 it[booleanPreferencesKey("clock_12h")] = next.twelveHourClock
                 it[booleanPreferencesKey("imperial")] = next.imperial
+                it[intPreferencesKey(KEY_BIKE_MODEL)] = next.bikeModel.ordinal
+                it[doublePreferencesKey(KEY_CUSTOM_KMPL)] = next.customKmpl
             }
         }
     }
