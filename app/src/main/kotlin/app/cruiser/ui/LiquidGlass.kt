@@ -3,10 +3,8 @@ package app.cruiser.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -15,10 +13,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -28,101 +26,61 @@ import app.cruiser.Session
 import app.cruiser.Session.LiquidGlassMode
 
 /**
- * Ambient dynamic lighting mesh placed behind screens.
- * Provides the contrast and color depth that makes glass transparency immediately obvious.
- */
-@Composable
-fun AmbientLightMesh(modifier: Modifier = Modifier) {
-    val dark = isSystemInDarkTheme()
-    val s by Session.settings.collectAsState()
-    if (s.liquidGlassMode == LiquidGlassMode.OFF) return
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .drawWithContent {
-                // Top-right warm motorcycle amber aura
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFFFFB74D).copy(alpha = if (dark) 0.18f else 0.25f),
-                            Color(0xFFFF9800).copy(alpha = if (dark) 0.08f else 0.12f),
-                            Color.Transparent,
-                        ),
-                        center = Offset(size.width * 0.85f, size.height * 0.18f),
-                        radius = size.width * 0.75f,
-                    ),
-                )
-                // Bottom-left cool slate/cyan refraction glow
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFF29B6F6).copy(alpha = if (dark) 0.14f else 0.18f),
-                            Color(0xFF0288D1).copy(alpha = if (dark) 0.05f else 0.08f),
-                            Color.Transparent,
-                        ),
-                        center = Offset(size.width * 0.15f, size.height * 0.82f),
-                        radius = size.width * 0.80f,
-                    ),
-                )
-            },
-    )
-}
-
-/**
- * Apple-style Liquid Glass modifier with chromatic edge refraction and lens glare.
- * Never blurs foreground content: text, digits, and icons remain 100% crisp.
+ * Material You + Liquid Glass hybrid modifier with a gradient of transparency.
+ * Top: 78% rich Material You dynamic tone -> Slopes down to 35% translucent liquid glass.
+ * Specular hairline glint along the perimeter edge.
  */
 @Composable
 fun Modifier.liquidGlass(
     mode: LiquidGlassMode,
     shape: Shape = RoundedCornerShape(24.dp),
-    tonalTint: Color? = null,
     borderWidth: Dp = 1.dp,
 ): Modifier {
     if (mode == LiquidGlassMode.OFF) return this
 
     val dark = isSystemInDarkTheme()
-    // Smoked crystal body: 38% - 48% opacity lets ambient light shine directly through
-    val baseTint = tonalTint ?: if (dark) {
-        Color(0xFF141824).copy(alpha = 0.42f)
-    } else {
-        Color.White.copy(alpha = 0.58f)
+    val topColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    val bottomColor = MaterialTheme.colorScheme.surfaceContainerLow
+
+    val glassBackground = remember(dark, topColor, bottomColor) {
+        Brush.verticalGradient(
+            0.0f to topColor.copy(alpha = if (dark) 0.80f else 0.88f),
+            0.45f to topColor.copy(alpha = if (dark) 0.62f else 0.70f),
+            1.0f to bottomColor.copy(alpha = if (dark) 0.35f else 0.45f),
+        )
     }
 
-    // Chromatic / Spectral Bevel: warm amber light on top-left, cool cyan on bottom-right
-    val chromaticBorder = Brush.linearGradient(
-        0.0f to Color(0xFFFFD54F).copy(alpha = if (dark) 0.55f else 0.70f), // Top-left amber glint
-        0.25f to Color.White.copy(alpha = if (dark) 0.40f else 0.60f),      // Specular highlight
-        0.65f to Color.White.copy(alpha = 0.10f),
-        0.85f to Color(0xFF81D4FA).copy(alpha = if (dark) 0.25f else 0.35f), // Bottom-right cyan refraction
-        1.0f to Color.Transparent,
-        start = Offset(0f, 0f),
-        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY),
-    )
+    val glassBorder = remember(dark) {
+        Brush.linearGradient(
+            0.0f to Color.White.copy(alpha = if (dark) 0.50f else 0.65f),
+            0.35f to Color.White.copy(alpha = 0.15f),
+            0.85f to Color.White.copy(alpha = 0.04f),
+            1.0f to Color.Transparent,
+        )
+    }
 
     return this
         .clip(shape)
-        .background(baseTint)
-        .border(width = borderWidth, brush = chromaticBorder, shape = shape)
+        .background(glassBackground)
+        .border(width = borderWidth, brush = glassBorder, shape = shape)
         .drawWithContent {
             drawContent()
-            // Parabolic lens glare across upper 35% of the glass
+            // Subtle specular lens sheen across top 25% of the glass
             drawRect(
                 brush = Brush.verticalGradient(
-                    0.0f to Color.White.copy(alpha = if (dark) 0.10f else 0.18f),
-                    0.35f to Color.White.copy(alpha = 0.02f),
-                    0.60f to Color.Transparent,
+                    0.0f to Color.White.copy(alpha = if (dark) 0.08f else 0.14f),
+                    0.25f to Color.Transparent,
                     startY = 0f,
-                    endY = size.height * 0.45f,
+                    endY = size.height * 0.35f,
                 ),
             )
         }
 }
 
 /**
- * Universal Glass Card used across Home and Settings.
- * Seamlessly toggles between Material 3 tonal elevation and optical liquid glass.
+ * Universal Material You + Liquid Glass Card used across Home and Settings.
+ * Blends rich dynamic Material You colors at the top into translucent liquid glass at the bottom.
+ * Caches all gradient shaders with `remember` for locked 120fps scrolling.
  */
 @Composable
 fun CruiserGlassCard(
@@ -132,9 +90,55 @@ fun CruiserGlassCard(
 ) {
     val s by Session.settings.collectAsState()
     val isGlass = s.liquidGlassMode != LiquidGlassMode.OFF
+    val dark = isSystemInDarkTheme()
+    val topColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val bottomColor = MaterialTheme.colorScheme.surfaceContainerLow
+
+    val glassBackground = remember(isGlass, dark, topColor, bottomColor) {
+        if (!isGlass) null
+        else {
+            Brush.verticalGradient(
+                0.0f to topColor.copy(alpha = if (dark) 0.78f else 0.85f),
+                0.40f to topColor.copy(alpha = if (dark) 0.58f else 0.68f),
+                1.0f to bottomColor.copy(alpha = if (dark) 0.32f else 0.42f),
+            )
+        }
+    }
+
+    val glassBorder = remember(isGlass, dark) {
+        if (!isGlass) null
+        else {
+            Brush.linearGradient(
+                0.0f to Color.White.copy(alpha = if (dark) 0.45f else 0.60f),
+                0.35f to Color.White.copy(alpha = 0.12f),
+                0.85f to Color.White.copy(alpha = 0.03f),
+                1.0f to Color.Transparent,
+            )
+        }
+    }
+
+    val cardModifier = if (isGlass && glassBackground != null && glassBorder != null) {
+        modifier
+            .clip(shape)
+            .background(glassBackground)
+            .border(width = 1.dp, brush = glassBorder, shape = shape)
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        0.0f to Color.White.copy(alpha = if (dark) 0.08f else 0.14f),
+                        0.25f to Color.Transparent,
+                        startY = 0f,
+                        endY = size.height * 0.35f,
+                    ),
+                )
+            }
+    } else {
+        modifier
+    }
 
     Card(
-        modifier = modifier.liquidGlass(mode = s.liquidGlassMode, shape = shape),
+        modifier = cardModifier,
         shape = shape,
         colors = CardDefaults.cardColors(
             containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,

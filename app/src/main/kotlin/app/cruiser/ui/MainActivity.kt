@@ -99,10 +99,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Request hardware maximum refresh rate (120Hz) for fluid animations
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            window.attributes = window.attributes.apply { preferredRefreshRate = 120f }
             val maxMode = display?.supportedModes?.maxByOrNull { it.refreshRate }
-            if (maxMode != null) {
-                window.attributes = window.attributes.apply { preferredDisplayModeId = maxMode.modeId }
+            window.attributes = window.attributes.apply {
+                preferredRefreshRate = 120f
+                if (maxMode != null) preferredDisplayModeId = maxMode.modeId
             }
         }
         // Settings persist from here, not from the Pod service, so theme changes
@@ -171,9 +171,6 @@ class MainActivity : ComponentActivity() {
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
-            // Ambient dynamic lighting mesh (reveals optical glass refraction & depth)
-            AmbientLightMesh()
-
             if (inPlayground) {
                 PlaygroundScreen(onBack = { inPlayground = false })
             } else {
