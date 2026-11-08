@@ -229,13 +229,14 @@ class PodLink(private val context: Context) {
 
     private fun drain() {
         val c = char ?: return
-        val b = queue.poll() ?: return
+        // Peek so a BT-down window can't consume the frame from the queue.
+        val b = queue.peek() ?: return
         c.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
         @Suppress("DEPRECATION")
         c.value = b
         @Suppress("DEPRECATION")
         val ok = client?.writeCharacteristic(c)
-        if (ok == false) Log.i("CruiserNav", "BLE write rejected")
+        if (ok == true) queue.poll() else if (ok == false) Log.i("CruiserNav", "BLE write rejected")
     }
 
     fun disconnect() {

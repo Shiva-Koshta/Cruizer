@@ -118,13 +118,25 @@ class PodService : Service() {
             // The Pod only advertises for ~30 s after ignition-on, so reconnect
             // attempts keep pacing in the background.
             var reconnectCountdown = 0
+            var failedDirect = 0
             while (isActive) {
                 if (link.state.value != LinkState.CONNECTED) {
                     if (--reconnectCountdown <= 0) {
+                        // A remembered MAC that never completes (Pod re-paired,
+                        // asleep, out of range) would loop forever: after a few
+                        // dead attempts, give up the address and re-scan.
+                        if (++failedDirect > 3) {
+                            link.deviceAddress.value = null
+                            failedDirect = 0
+                            Log.i("CruiserNav", "direct connect kept failing — re-scan")
+                        }
                         link.scanOrConnect(bleReady())
                         reconnectCountdown = 7
                     }
-                } else reconnectCountdown = 0
+                } else {
+                    reconnectCountdown = 0
+                    failedDirect = 0
+                }
                 val now = System.currentTimeMillis()
                 if (link.state.value == LinkState.CONNECTED) tick()
                 else if (BuildConfig.DEBUG) Log.i("CruiserNav", "tick skipped: ${link.state.value}")

@@ -78,6 +78,11 @@ class NavTextParserTest {
     }
 
     @Test
+    fun startingNavigationIsIdle() {
+        assertEquals(Parsed.Idle, NavTextParser.parse("Starting navigation…"))
+    }
+
+    @Test
     fun arrived() {
         val p = NavTextParser.parse("You have arrived at your destination") as Parsed.Turn
         assertEquals(TurnKind.DESTINATION, p.update.kind)

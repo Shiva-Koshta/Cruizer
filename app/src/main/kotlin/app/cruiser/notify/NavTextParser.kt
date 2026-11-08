@@ -83,8 +83,10 @@ object NavTextParser {
         val lower = body.lowercase()
         if (lower.isBlank()) return Parsed.Idle
 
-        // Google Maps idles on "Guiding to <destination>" with no actionable turn.
+        // Maps idles on "Guiding to <destination>" and flashes "Starting navigation…"
+        // before the first instruction — neither is actionable.
         if (lower.contains("guiding to") && !DISTANCE.containsMatchIn(lower)) return Parsed.Idle
+        if (lower.contains("starting navigation")) return Parsed.Idle
 
         if (CAMERA.containsMatchIn(lower)) {
             // Cameras arrive as separate/updated notifications; report once and stay silent.
