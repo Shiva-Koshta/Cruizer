@@ -1,5 +1,7 @@
 package app.cruiser.notify
 
+import android.content.ComponentName
+import android.content.Context
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import app.cruiser.Session
@@ -8,9 +10,6 @@ import app.cruiser.Session
  * Android boundary only: watches nav-app notifications, captures their raw text
  * (debug capture lives in the Settings tab) and hands it to [NavTextParser]
  * (pure, unit-tested), which produces what Session posts.
- *
- * CoMaps is deliberately NOT here: its structured ContentProvider (ComapsSource)
- * is the primary source; text parsing is only the fallback we don't ship.
  */
 class TurnSource : NotificationListenerService() {
 
@@ -18,9 +17,16 @@ class TurnSource : NotificationListenerService() {
         private val NAV_PACKAGES = setOf(
             "net.osmand", // OsmAnd / OsmAnd+
             "app.organicmaps",
+            "app.comaps", // CoMaps (Organic Maps fork — provider primary, text fallback)
             "com.google.android.apps.maps",
             "com.waze",
         )
+
+        fun rebind(context: Context) {
+            runCatching {
+                requestRebind(ComponentName(context, TurnSource::class.java))
+            }
+        }
     }
 
     override fun onListenerConnected() {
@@ -86,6 +92,9 @@ class TurnSource : NotificationListenerService() {
         }
     }
 
-    private fun isNavSource(sbn: StatusBarNotification): Boolean =
-        sbn.isOngoing && NAV_PACKAGES.any(sbn.packageName::startsWith)
+    private fun isNavSource(sbn: StatusBarNotification): Boolean {
+        val ongoing = sbn.isOngoing ||
+            (sbn.notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
+        return ongoing && NAV_PACKAGES.any(sbn.packageName::startsWith)
+    }
 }

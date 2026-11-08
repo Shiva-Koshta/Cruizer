@@ -108,4 +108,18 @@ class NavTextParserTest {
         assertEquals(300, p.update.distanceM)
         assertNull(p.update.routeRemainingM)
     }
+
+    @Test
+    fun nonBreakingSpaceInDistance() {
+        // Android notifications frequently format distances using non-breaking space (0xA0).
+        val p = NavTextParser.parse("Turn right in 350\u00A0m onto Main Street") as Parsed.Turn
+        assertEquals(TurnKind.RIGHT, p.update.kind)
+        assertEquals(350, p.update.distanceM)
+    }
+
+    @Test
+    fun metersOfHandlesUnicodeSpaces() {
+        assertEquals(1200, NavTextParser.metersOf("1.2\u00A0km"))
+        assertEquals(500, NavTextParser.metersOf("500\u202Fm"))
+    }
 }

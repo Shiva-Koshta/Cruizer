@@ -102,9 +102,10 @@ object ComapsSource {
         }
 
         fun query(ctx: Context) {
+            val pkg = installed(ctx).firstOrNull() ?: return
             try {
                 val cursor = ctx.contentResolver.query(
-                    Uri.parse("content://${installed(ctx).first()}$AUTHORITY_SUFFIX/live"),
+                    Uri.parse("content://$pkg$AUTHORITY_SUFFIX/live"),
                     null, null, null, null,
                 )
                 val row = cursor?.use { c ->

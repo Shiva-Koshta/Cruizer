@@ -107,6 +107,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         gate.value = gate.value + 1 // permission state may have changed off-screen
+        app.cruiser.notify.TurnSource.rebind(this)
     }
 
     private fun isReady(): Boolean =

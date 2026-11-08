@@ -91,6 +91,7 @@ class PodService : Service() {
         refreshLocation()
         registerPhoneState()
         ComapsSource.start(this) // structured turn data from CoMaps, if installed+granted
+        app.cruiser.notify.TurnSource.rebind(this) // ask OS to bind the listener if enabled
         // UI PIN submissions -> Pod (PIN typed on the connection dialog).
         scope.launch { Session.pinInput.collect { link.send(PodProtocol.pinFrame(it)) } }
         // Trips tab start/stop -> recorder (service consumes and clears).

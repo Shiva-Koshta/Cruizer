@@ -80,7 +80,7 @@ object NavTextParser {
     }
 
     fun parse(body: String, now: Calendar = Calendar.getInstance()): Parsed {
-        val lower = body.lowercase()
+        val lower = body.lowercase().replace('\u00A0', ' ').replace('\u202F', ' ')
         if (lower.isBlank()) return Parsed.Idle
 
         // Maps idles on "Guiding to <destination>" and flashes "Starting navigation…"
@@ -135,7 +135,8 @@ object NavTextParser {
     private fun toMeters(m: MatchResult): Int? = toMeters(m.groupValues[1], m.groupValues[2])
 
     /** Public hook for the structured sources (CoMaps provider sends formatted "1.2 km" strings). */
-    fun metersOf(text: String): Int? = DISTANCE.find(text)?.let(::toMeters)
+    fun metersOf(text: String): Int? =
+        DISTANCE.find(text.replace('\u00A0', ' ').replace('\u202F', ' '))?.let(::toMeters)
 
     private fun toMeters(value: String, unit: String): Int? {
         val v = value.replace(',', '.').toDoubleOrNull() ?: return null
