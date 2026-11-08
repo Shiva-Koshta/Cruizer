@@ -49,8 +49,8 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CruiserGlassCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(2.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Theme", style = MaterialTheme.typography.titleSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(
@@ -140,8 +140,8 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
             val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
                 androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
             ) { app.cruiser.notify.ComapsSource.start(context) }
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            CruiserGlassCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(2.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("CoMaps integration", style = MaterialTheme.typography.titleSmall)
                     Text("Grant CoMaps data permission to get exact turn arrows instead of text parsing.", style = MaterialTheme.typography.bodySmall)
                     Button(onClick = { launcher.launch(comapsPerms.toTypedArray()) }) {
@@ -155,8 +155,8 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
             OutlinedButton(onClick = onPlayground) { Text("Frame playground") }
             val notifs by app.cruiser.Session.recentNotifs.collectAsState()
             if (notifs.isNotEmpty()) {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                CruiserGlassCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,

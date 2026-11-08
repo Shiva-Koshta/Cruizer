@@ -75,18 +75,12 @@ fun LiveTripCard(modifier: Modifier = Modifier) {
     val navActive by Session.navActive.collectAsState()
     val settings by Session.settings.collectAsState()
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .liquidGlass(settings.liquidGlassMode, shape = RoundedCornerShape(24.dp)),
+    CruiserGlassCard(
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (settings.liquidGlassMode != Session.LiquidGlassMode.OFF) Color.Transparent
-            else MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(2.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // Header Row
@@ -319,18 +313,12 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
     val settings by Session.settings.collectAsState()
     var renamingPod by remember { mutableStateOf<Session.SavedPod?>(null) }
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .liquidGlass(settings.liquidGlassMode, shape = RoundedCornerShape(24.dp)),
+    CruiserGlassCard(
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (settings.liquidGlassMode != Session.LiquidGlassMode.OFF) Color.Transparent
-            else MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(2.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(

@@ -97,6 +97,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Request hardware maximum refresh rate (120Hz) for fluid animations
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            window.attributes = window.attributes.apply { preferredRefreshRate = 120f }
+            val maxMode = display?.supportedModes?.maxByOrNull { it.refreshRate }
+            if (maxMode != null) {
+                window.attributes = window.attributes.apply { preferredDisplayModeId = maxMode.modeId }
+            }
+        }
         // Settings persist from here, not from the Pod service, so theme changes
         // survive even when the rider never connects.
         Session.init(applicationContext)
@@ -144,34 +152,17 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun Tabs(modifier: Modifier = Modifier) {
-        val current by page.collectAsState()
         val s by Session.settings.collectAsState()
-        val pagerState = rememberPagerState(initialPage = 0) { 2 } // 0 = POD (Bike), 1 = SETTINGS
+        val pagerState = rememberPagerState(initialPage = 0) { 2 } // 0 = Bike (Home), 1 = Settings
         val scope = rememberCoroutineScope()
-
-        // Sync pager with page state
-        LaunchedEffect(pagerState.currentPage) {
-            if (current != Page.PLAYGROUND) {
-                page.value = if (pagerState.currentPage == 0) Page.POD else Page.SETTINGS
-            }
-        }
-        LaunchedEffect(current) {
-            if (current == Page.POD && pagerState.currentPage != 0) {
-                pagerState.animateScrollToPage(0)
-            } else if (current == Page.SETTINGS && pagerState.currentPage != 1) {
-                pagerState.animateScrollToPage(1)
-            }
-        }
+        var inPlayground by remember { mutableStateOf(false) }
 
         // BackHandler: Playground -> Settings -> Home -> Exit
-        BackHandler(enabled = current != Page.POD) {
-            when (current) {
-                Page.PLAYGROUND -> page.value = Page.SETTINGS
-                Page.SETTINGS -> {
-                    page.value = Page.POD
-                    scope.launch { pagerState.animateScrollToPage(0) }
-                }
-                Page.POD -> {}
+        BackHandler(enabled = inPlayground || pagerState.currentPage != 0) {
+            if (inPlayground) {
+                inPlayground = false
+            } else {
+                scope.launch { pagerState.animateScrollToPage(0) }
             }
         }
 
@@ -180,8 +171,11 @@ class MainActivity : ComponentActivity() {
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
-            if (current == Page.PLAYGROUND) {
-                PlaygroundScreen(onBack = { page.value = Page.SETTINGS })
+            // Ambient dynamic lighting mesh (reveals optical glass refraction & depth)
+            AmbientLightMesh()
+
+            if (inPlayground) {
+                PlaygroundScreen(onBack = { inPlayground = false })
             } else {
                 HorizontalPager(
                     state = pagerState,
@@ -189,13 +183,13 @@ class MainActivity : ComponentActivity() {
                 ) { pageIndex ->
                     when (pageIndex) {
                         0 -> PodScreen()
-                        1 -> SettingsScreen(onPlayground = { page.value = Page.PLAYGROUND })
+                        1 -> SettingsScreen(onPlayground = { inPlayground = true })
                     }
                 }
             }
 
             // Truly Floating Capsule Pill Bar (Transparent surround, shadow + tonal elevation)
-            if (current != Page.PLAYGROUND) {
+            if (!inPlayground) {
                 Surface(
                     shape = CircleShape,
                     color = if (s.liquidGlassMode != Session.LiquidGlassMode.OFF) Color.Transparent
@@ -217,11 +211,11 @@ class MainActivity : ComponentActivity() {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         listOf(
-                            Page.POD to ("Bike" to Icons.Filled.Home),
-                            Page.SETTINGS to ("Settings" to Icons.Filled.Settings),
-                        ).forEach { (p, pair) ->
+                            0 to ("Bike" to Icons.Filled.Home),
+                            1 to ("Settings" to Icons.Filled.Settings),
+                        ).forEach { (index, pair) ->
                             val (label, icon) = pair
-                            val isSelected = current == p
+                            val isSelected = pagerState.currentPage == index
                             Surface(
                                 shape = CircleShape,
                                 color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
@@ -231,8 +225,7 @@ class MainActivity : ComponentActivity() {
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null,
                                     ) {
-                                        page.value = p
-                                        scope.launch { pagerState.animateScrollToPage(if (p == Page.POD) 0 else 1) }
+                                        scope.launch { pagerState.animateScrollToPage(index) }
                                     },
                             ) {
                                 Row(
@@ -287,22 +280,12 @@ private fun PodScreen(modifier: Modifier = Modifier) {
         }
 
         // Connection Status Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .liquidGlass(s.liquidGlassMode, shape = RoundedCornerShape(24.dp)),
+        CruiserGlassCard(
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (s.liquidGlassMode != Session.LiquidGlassMode.OFF) Color.Transparent
-                else when (state) {
-                    LinkState.CONNECTED -> Color(0xFF1B5E20).copy(alpha = 0.12f)
-                    LinkState.CONNECTING, LinkState.SCANNING -> Color(0xFFE65100).copy(alpha = 0.12f)
-                    else -> MaterialTheme.colorScheme.surfaceContainerHigh
-                },
-            ),
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier.padding(2.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(
