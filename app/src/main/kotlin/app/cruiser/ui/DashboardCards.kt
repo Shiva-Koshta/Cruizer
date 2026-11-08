@@ -83,13 +83,40 @@ fun LiveTripCard(modifier: Modifier = Modifier) {
             modifier = Modifier.padding(2.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            // Header Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.LocationOn,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        "Live Ride Dashboard",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    )
+                }
+
+                TextButton(onClick = Session::resetLiveRide) {
+                    Text("Reset Trip")
+                }
+            }
+
             // Live Navigation Instructions (matching what the Pod displays)
             if (turn != null || navActive) {
                 NavigationPreviewSection(turn = turn, imperial = settings.imperial)
             }
 
-            // Hero Digital Instrument Cluster & Telemetry
-            CockpitInstrumentSection(
+            // Live Automatic Ride Metrics (Distance, Time, Speed, Avg Speed, Fuel)
+            LiveRideMetricsSection(
                 ride = liveRide,
                 settings = settings,
             )
@@ -102,7 +129,7 @@ private fun NavigationPreviewSection(turn: TurnUpdate?, imperial: Boolean) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -197,15 +224,17 @@ private fun NavigationPreviewSection(turn: TurnUpdate?, imperial: Boolean) {
 }
 
 @Composable
-private fun CockpitInstrumentSection(ride: Session.LiveRide, settings: Session.Settings) {
+private fun LiveRideMetricsSection(ride: Session.LiveRide, settings: Session.Settings) {
     val elapsedSec = ride.elapsedSeconds
-    val speedValue = if (!settings.imperial) ride.currentSpeedKmh else (ride.currentSpeedKmh * 0.621371).toInt()
-    val speedUnit = if (!settings.imperial) "km/h" else "mph"
-
     val distStr = if (!settings.imperial) {
         "%.1f km".format(Locale.US, ride.distanceM / 1000f)
     } else {
         "%.1f mi".format(Locale.US, ride.distanceM * 0.000621371f)
+    }
+    val speedStr = if (!settings.imperial) {
+        "${ride.currentSpeedKmh} km/h"
+    } else {
+        "${(ride.currentSpeedKmh * 0.621371).toInt()} mph"
     }
     val avgSpeedStr = if (!settings.imperial) {
         "${ride.avgSpeedKmh} km/h"
@@ -228,49 +257,22 @@ private fun CockpitInstrumentSection(ride: Session.LiveRide, settings: Session.S
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // High-Resolution Digital Speedometer
-        Column(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            Text(
-                text = "$speedValue",
-                fontSize = 56.sp,
-                fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.onSurface,
-                letterSpacing = (-2).sp,
-            )
-            Text(
-                text = speedUnit,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary,
-            )
+            MetricTile("Distance", distStr)
+            MetricTile("Duration", formatDuration(elapsedSec))
+            MetricTile("Speed", speedStr)
         }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            MetricTile("Trip Distance", distStr)
-            MetricTile("Duration", formatDuration(elapsedSec))
             MetricTile("Avg Speed", avgSpeedStr)
             MetricTile("Est. Fuel", fuelStr)
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val bikeName = bike?.nickname ?: "My Bike"
-            Text(
-                "$bikeName · $economyStr",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            TextButton(onClick = Session::resetLiveRide) {
-                Text("Reset Trip")
-            }
+            MetricTile("Economy", economyStr)
         }
     }
 }
@@ -347,7 +349,7 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
                     ) {
                         Row(
                             modifier = Modifier

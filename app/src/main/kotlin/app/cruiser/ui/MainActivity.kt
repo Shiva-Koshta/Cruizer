@@ -296,70 +296,129 @@ private fun PodScreen(modifier: Modifier = Modifier) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // Cockpit Header & Live Connection Status
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text("Cruiser", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold))
-                val activeBike = Session.activeBike()
-                Text(
-                    text = if (activeBike != null) "🏍️ ${activeBike.nickname}" else "Royal Enfield Tripper Pod",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        // App Header
+        Column {
+            Text("Cruiser", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold))
+            Text("Royal Enfield Tripper Pod", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
 
-            Surface(
-                shape = CircleShape,
-                color = when (state) {
-                    LinkState.CONNECTED -> Color(0xFF2E7D32)
-                    LinkState.CONNECTING, LinkState.SCANNING -> Color(0xFFEF6C00)
-                    else -> MaterialTheme.colorScheme.surfaceVariant
-                },
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable {
-                        when (state) {
-                            LinkState.CONNECTED -> context.podStop()
-                            LinkState.CONNECTING, LinkState.SCANNING -> context.podStop()
-                            LinkState.DISCONNECTED -> context.podStart()
-                            LinkState.BT_OFF -> enableBt.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                            LinkState.NO_PERMISSIONS -> MainActivity.gate.value = MainActivity.gate.value + 1
-                        }
-                    },
+        // Connection Status Card
+        CruiserGlassCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(2.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    if (state == LinkState.CONNECTING || state == LinkState.SCANNING) {
-                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = Color.White)
-                    }
-                    Text(
-                        when (state) {
-                            LinkState.CONNECTED -> "Disconnect"
-                            LinkState.CONNECTING -> "Connecting…"
-                            LinkState.SCANNING -> "Scanning…"
-                            LinkState.BT_OFF -> "Turn on BT"
-                            LinkState.NO_PERMISSIONS -> "Grant Perms"
-                            LinkState.DISCONNECTED -> "Connect"
-                        },
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                    Surface(
+                        shape = CircleShape,
                         color = when (state) {
-                            LinkState.CONNECTED, LinkState.CONNECTING, LinkState.SCANNING -> Color.White
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            LinkState.CONNECTED -> Color(0xFF2E7D32)
+                            LinkState.CONNECTING, LinkState.SCANNING -> Color(0xFFEF6C00)
+                            else -> MaterialTheme.colorScheme.surfaceVariant
                         },
-                    )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                when (state) {
+                                    LinkState.CONNECTED -> "🏍️ Connected"
+                                    LinkState.CONNECTING -> "⚡ Connecting"
+                                    LinkState.SCANNING -> "🔍 Scanning"
+                                    LinkState.BT_OFF -> "⚠️ Bluetooth Off"
+                                    LinkState.NO_PERMISSIONS -> "🔒 Permissions Needed"
+                                    LinkState.DISCONNECTED -> "💤 Disconnected"
+                                },
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when (state) {
+                                    LinkState.CONNECTED, LinkState.CONNECTING, LinkState.SCANNING -> Color.White
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                    }
+
+                    if (state == LinkState.CONNECTING || state == LinkState.SCANNING) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                    }
+                }
+
+                Text(
+                    when (state) {
+                        LinkState.CONNECTED -> "Streaming navigation instructions to your motorcycle dial."
+                        LinkState.CONNECTING -> "Handshaking with the Tripper Pod PIN authentication."
+                        LinkState.SCANNING -> "Turn the motorcycle ignition on. Pod advertises for ~30 seconds."
+                        LinkState.BT_OFF -> "Turn on Bluetooth to connect to your motorcycle."
+                        LinkState.NO_PERMISSIONS -> "Bluetooth Connect & Scan permissions are required."
+                        LinkState.DISCONNECTED -> "Connect to beam turn-by-turn directions directly to your Pod."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                // Actions Row
+                when (state) {
+                    LinkState.CONNECTED -> {
+                        Button(
+                            onClick = { context.podStop() },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text("Disconnect")
+                        }
+                    }
+                    LinkState.CONNECTING, LinkState.SCANNING -> {
+                        OutlinedButton(
+                            onClick = { context.podStop() },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text("Cancel Search")
+                        }
+                    }
+                    LinkState.DISCONNECTED -> {
+                        Button(
+                            onClick = { context.podStart() },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text("Connect to Pod")
+                        }
+                    }
+                    LinkState.BT_OFF -> {
+                        Button(
+                            onClick = { enableBt.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text("Turn on Bluetooth")
+                        }
+                    }
+                    LinkState.NO_PERMISSIONS -> {
+                        Button(
+                            onClick = { MainActivity.gate.value = MainActivity.gate.value + 1 },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text("Grant Permissions")
+                        }
+                    }
                 }
             }
         }
 
-        // Live Trip & Navigation Cockpit Dashboard
+        // Live Trip & Navigation Dashboard Card
         LiveTripCard()
 
         // Multi-Pod Saved Bikes Card
