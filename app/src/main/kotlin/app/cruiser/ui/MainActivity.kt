@@ -72,8 +72,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -102,6 +106,11 @@ class MainActivity : ComponentActivity() {
          * (the onboarding gate) recomposes and re-checks preconditions.
          */
         val gate = MutableStateFlow(0)
+
+        private val TAB_ITEMS = listOf(
+            0 to ("Bike" to Icons.Filled.Home),
+            1 to ("Settings" to Icons.Filled.Settings),
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -168,6 +177,19 @@ class MainActivity : ComponentActivity() {
 
         var backProgress by remember { mutableFloatStateOf(0f) }
 
+        val lockoutNestedScroll = remember {
+            object : NestedScrollConnection {
+                override fun onPostScroll(
+                    consumed: Offset,
+                    available: Offset,
+                    source: NestedScrollSource,
+                ): Offset {
+                    // Absorb any leftover vertical overscroll so it never bleeds into horizontal pager drag
+                    return Offset(0f, available.y)
+                }
+            }
+        }
+
         // Predictive back: active on Playground or on Settings (settledPage != 0)
         // When on Bike (settledPage == 0 and not in playground), disabled -> system back exits to launcher
         val isBackEnabled = inPlayground || pagerState.settledPage != 0
@@ -195,34 +217,27 @@ class MainActivity : ComponentActivity() {
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
             // Main content: HorizontalPager holding Bike (0) and Settings (1)
-            Box(
-                modifier = Modifier
+            val pagerModifier = if (backProgress > 0f && !inPlayground) {
+                Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        if (inPlayground && backProgress > 0f) {
-                            val scale = 0.94f + (backProgress * 0.06f)
-                            scaleX = scale
-                            scaleY = scale
-                        } else if (!inPlayground && pagerState.settledPage != 0 && backProgress > 0f) {
-                            translationX = backProgress * size.width * 0.25f
-                        }
+                        translationX = backProgress * size.width * 0.25f
                     }
-                    .drawWithContent {
-                        drawContent()
-                        if (inPlayground && backProgress > 0f) {
-                            drawRect(Color.Black.copy(alpha = (1f - backProgress) * 0.20f))
-                        }
-                    },
-            ) {
-                HorizontalPager(
-                    state = pagerState,
-                    beyondViewportPageCount = 1,
-                    modifier = Modifier.fillMaxSize(),
-                ) { pageIndex ->
-                    when (pageIndex) {
-                        0 -> PodScreen()
-                        1 -> SettingsScreen(onPlayground = { inPlayground = true })
-                    }
+                    .nestedScroll(lockoutNestedScroll)
+            } else {
+                Modifier
+                    .fillMaxSize()
+                    .nestedScroll(lockoutNestedScroll)
+            }
+
+            HorizontalPager(
+                state = pagerState,
+                beyondViewportPageCount = 1,
+                modifier = pagerModifier,
+            ) { pageIndex ->
+                when (pageIndex) {
+                    0 -> PodScreen()
+                    1 -> SettingsScreen(onPlayground = { inPlayground = true })
                 }
             }
 
@@ -282,10 +297,7 @@ class MainActivity : ComponentActivity() {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                listOf(
-                    0 to ("Bike" to Icons.Filled.Home),
-                    1 to ("Settings" to Icons.Filled.Settings),
-                ).forEach { (index, pair) ->
+                TAB_ITEMS.forEach { (index, pair) ->
                     val (label, icon) = pair
                     val isSelected = currentPage == index
                     Surface(

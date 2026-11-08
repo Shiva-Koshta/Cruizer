@@ -11,15 +11,15 @@ android {
         applicationId = "app.cruiser"
         minSdk = 31
         targetSdk = 37
-        versionCode = 23
-        versionName = "0.4.0-perf-grapheneos-120hz"
+        versionCode = 26
+        versionName = "0.4.1-perf-grapheneos-120hz"
     }
 
     buildTypes {
         debug { }
         release {
-            isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     buildFeatures {
