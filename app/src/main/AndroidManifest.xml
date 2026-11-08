@@ -58,14 +58,6 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice|location" />
 
-        <receiver
-            android:name=".ToastReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="app.cruiser.TOAST" />
-            </intent-filter>
-        </receiver>
-
         <service
             android:name=".notify.TurnSource"
             android:exported="true"

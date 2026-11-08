@@ -33,7 +33,9 @@ feed if notification text proves too coarse.
 
 ## Building
 
-- Android Studio Ladybug+ or any Gradle 9.6-compatible setup; `./gradlew app:assembleDebug`.
+- Android Studio Ladybug+ or any Gradle 9.6-compatible setup.
+- Debug build: `./gradlew app:assembleDebug`
+- Release build (AOT compiled, solid 120Hz performance): `./gradlew app:assembleRelease`
 - minSdk 31 (Android 12), Compose Material 3 with Material You dynamic theming.
 
 ## Pairing

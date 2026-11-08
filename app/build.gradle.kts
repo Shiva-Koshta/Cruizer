@@ -12,7 +12,7 @@ android {
         minSdk = 31
         targetSdk = 37
         versionCode = 27
-        versionName = "0.4.1-perf-grapheneos-120hz"
+        versionName = "0.4.1"
     }
 
     buildTypes {

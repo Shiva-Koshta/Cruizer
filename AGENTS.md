@@ -6,12 +6,13 @@ BLE with turn-by-turn data parsed from nav apps. One rider, one phone.
 ## Commands
 
 ```sh
-./gradlew app:assembleDebug app:testDebugUnitTest --no-daemon   # build + tests
+./gradlew app:assembleRelease app:testDebugUnitTest --no-daemon  # release build (AOT speed compiled, 120Hz smooth)
+./gradlew app:assembleDebug app:testDebugUnitTest --no-daemon    # debug build
 ./gradlew app:testDebugUnitTest --tests "app.cruiser.NavTextParserTest" --no-daemon
 ```
 
 - No system Android SDK: it lives in `./android-sdk/` (gitignored). `local.properties` is gitignored too.
-- APK output: `app/build/outputs/apk/debug/app-debug.apk`.
+- APK output: `app/build/outputs/apk/release/app-release.apk` (debug-signed) or `app/build/outputs/apk/debug/app-debug.apk`.
 - All tests are pure JVM (JUnit 4) under `app/src/test` — parsers and protocol only. Hardware/BLE has no tests.
 
 ## Hard constraints
@@ -53,6 +54,7 @@ BLE with turn-by-turn data parsed from nav apps. One rider, one phone.
 - GrapheneOS auto-kills Bluetooth: `PodLink` watches adapter state and re-opens the GATT
   server on STATE_ON; a stale remembered MAC re-scans after 3 failed direct connects.
 - The Tripper Pod only advertises ~30 s after ignition-on.
+- **Compose Debug vs. Release performance**: In `debug` builds, Android ART disables AOT compilation (`status=verify`) and Compose injects per-composable debug tracing. On 120Hz displays and hardened operating systems like GrapheneOS (`hardened_malloc`), this inflates frame evaluation from ~1ms to 25ms–35ms, resulting in perceived frame rate capping at ~20–30 fps. Always test UI smoothness using `./gradlew app:assembleRelease` (which is debug-signed and AOT compiled with `status=speed`).
 
 ## Conventions
 
