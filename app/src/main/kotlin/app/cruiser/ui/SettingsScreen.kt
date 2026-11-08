@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import app.cruiser.BuildConfig
 import app.cruiser.Session
 
 /** Settings in their own tab; frame playground lives here on debug builds. */
@@ -123,6 +124,11 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
         }
+
+        Text(
+            "Cruiser v${BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 
