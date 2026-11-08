@@ -295,7 +295,13 @@ class PodService : Service() {
         val turn = Session.currentTurn.value
         if (turn == null) {
             if (now - lastFrameSentAt > 2000) {
-                link.send(PodProtocol.PING_FW)
+                if (Session.navActive.value) {
+                    // Route is live but has no instruction yet: keep the Pod on
+                    // the route-started icon instead of its clock screen.
+                    link.send(PodProtocol.routeStartedFrame(night))
+                } else {
+                    link.send(PodProtocol.PING_FW)
+                }
                 lastFrameSentAt = now
             }
             return

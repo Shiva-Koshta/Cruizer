@@ -109,6 +109,9 @@ object Session {
     private val _currentTurn = MutableStateFlow<TurnUpdate?>(null)
     val currentTurn: StateFlow<TurnUpdate?> = _currentTurn
 
+    /** A nav app has an ongoing navigation notification (even before any turn text). */
+    val navActive = MutableStateFlow(false)
+
     fun postTurn(t: TurnUpdate?) {
         if (BuildConfig.DEBUG) {
             Log.i(

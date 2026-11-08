@@ -34,6 +34,11 @@ class TurnSource : NotificationListenerService() {
         activeNotifications.forEach(::tryParse)
     }
 
+    override fun onListenerDisconnected() {
+        Session.navActive.value = false
+        Session.postTurn(null)
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         tryParse(sbn)
     }
@@ -43,11 +48,19 @@ class TurnSource : NotificationListenerService() {
         // Another nav app may still be giving instructions — reparse the
         // remaining ones before declaring the route over.
         val next = activeNotifications.filter { it.key != sbn.key }.firstOrNull(::isNavSource)
-        if (next != null) tryParse(next) else Session.postTurn(null)
+        if (next != null) {
+            tryParse(next)
+        } else {
+            Session.navActive.value = false
+            Session.postTurn(null)
+        }
     }
 
     private fun tryParse(sbn: StatusBarNotification) {
         if (!isNavSource(sbn)) return
+        // Any ongoing nav notification means a route is live, even if its text
+        // is still idle ("Guiding to…", "Starting navigation…").
+        Session.navActive.value = true
         val e = sbn.notification.extras
         val title = e.getCharSequence("android.title")?.toString()?.trim().orEmpty()
         val bigText = e.getCharSequence("android.bigText")?.toString()?.trim().orEmpty()
@@ -65,6 +78,7 @@ class TurnSource : NotificationListenerService() {
         when (val p = NavTextParser.parse(body)) {
             is NavTextParser.Parsed.Turn -> {
                 Session.postRadar(null) // a fresh turn means the camera alert is stale
+                if (p.update.ended) Session.navActive.value = false // arrived: route over
                 Session.postTurn(p.update)
             }
             is NavTextParser.Parsed.Camera -> Session.postRadar(p.meters)
