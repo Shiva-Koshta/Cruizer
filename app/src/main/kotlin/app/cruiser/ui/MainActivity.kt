@@ -20,6 +20,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -184,25 +186,29 @@ class MainActivity : ComponentActivity() {
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
             // Main content: HorizontalPager holding Bike (0) and Settings (1)
-            Box(
-                modifier = Modifier
+            val mainContentModifier = if (backProgress > 0f) {
+                Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        if (inPlayground && backProgress > 0f) {
+                        if (inPlayground) {
                             val scale = 0.94f + (backProgress * 0.06f)
                             scaleX = scale
                             scaleY = scale
-                        } else if (!inPlayground && pagerState.settledPage != 0 && backProgress > 0f) {
+                        } else if (pagerState.settledPage != 0) {
                             translationX = backProgress * size.width * 0.25f
                         }
                     }
                     .drawWithContent {
                         drawContent()
-                        if (inPlayground && backProgress > 0f) {
+                        if (inPlayground) {
                             drawRect(Color.Black.copy(alpha = (1f - backProgress) * 0.20f))
                         }
-                    },
-            ) {
+                    }
+            } else {
+                Modifier.fillMaxSize()
+            }
+
+            Box(modifier = mainContentModifier) {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
@@ -323,130 +329,133 @@ private fun PodScreen(modifier: Modifier = Modifier) {
         ActivityResultContracts.StartActivityForResult(),
     ) {}
 
-    Column(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // App Header
-        Column {
-            Text("Cruiser", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold))
-            Text("Royal Enfield Tripper Pod", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        item {
+            Column {
+                Text("Cruiser", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold))
+                Text("Royal Enfield Tripper Pod", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
 
         // Connection Status Card
-        CruiserGlassCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(2.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+        item {
+            CruiserGlassCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                Column(
+                    modifier = Modifier.padding(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = when (state) {
-                            LinkState.CONNECTED -> Color(0xFF2E7D32)
-                            LinkState.CONNECTING, LinkState.SCANNING -> Color(0xFFEF6C00)
-                            else -> MaterialTheme.colorScheme.surfaceVariant
-                        },
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        Surface(
+                            shape = CircleShape,
+                            color = when (state) {
+                                LinkState.CONNECTED -> Color(0xFF2E7D32)
+                                LinkState.CONNECTING, LinkState.SCANNING -> Color(0xFFEF6C00)
+                                else -> MaterialTheme.colorScheme.surfaceVariant
+                            },
                         ) {
-                            Text(
-                                when (state) {
-                                    LinkState.CONNECTED -> "🏍️ Connected"
-                                    LinkState.CONNECTING -> "⚡ Connecting"
-                                    LinkState.SCANNING -> "🔍 Scanning"
-                                    LinkState.BT_OFF -> "⚠️ Bluetooth Off"
-                                    LinkState.NO_PERMISSIONS -> "🔒 Permissions Needed"
-                                    LinkState.DISCONNECTED -> "💤 Disconnected"
-                                },
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = when (state) {
-                                    LinkState.CONNECTED, LinkState.CONNECTING, LinkState.SCANNING -> Color.White
-                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    when (state) {
+                                        LinkState.CONNECTED -> "🏍️ Connected"
+                                        LinkState.CONNECTING -> "⚡ Connecting"
+                                        LinkState.SCANNING -> "🔍 Scanning"
+                                        LinkState.BT_OFF -> "⚠️ Bluetooth Off"
+                                        LinkState.NO_PERMISSIONS -> "🔒 Permissions Needed"
+                                        LinkState.DISCONNECTED -> "💤 Disconnected"
+                                    },
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when (state) {
+                                        LinkState.CONNECTED, LinkState.CONNECTING, LinkState.SCANNING -> Color.White
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            }
+                        }
+
+                        if (state == LinkState.CONNECTING || state == LinkState.SCANNING) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
                         }
                     }
 
-                    if (state == LinkState.CONNECTING || state == LinkState.SCANNING) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
-                    }
-                }
+                    Text(
+                        when (state) {
+                            LinkState.CONNECTED -> "Streaming navigation instructions to your motorcycle dial."
+                            LinkState.CONNECTING -> "Handshaking with the Tripper Pod PIN authentication."
+                            LinkState.SCANNING -> "Turn the motorcycle ignition on. Pod advertises for ~30 seconds."
+                            LinkState.BT_OFF -> "Turn on Bluetooth to connect to your motorcycle."
+                            LinkState.NO_PERMISSIONS -> "Bluetooth Connect & Scan permissions are required."
+                            LinkState.DISCONNECTED -> "Connect to beam turn-by-turn directions directly to your Pod."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
 
-                Text(
+                    // Actions Row
                     when (state) {
-                        LinkState.CONNECTED -> "Streaming navigation instructions to your motorcycle dial."
-                        LinkState.CONNECTING -> "Handshaking with the Tripper Pod PIN authentication."
-                        LinkState.SCANNING -> "Turn the motorcycle ignition on. Pod advertises for ~30 seconds."
-                        LinkState.BT_OFF -> "Turn on Bluetooth to connect to your motorcycle."
-                        LinkState.NO_PERMISSIONS -> "Bluetooth Connect & Scan permissions are required."
-                        LinkState.DISCONNECTED -> "Connect to beam turn-by-turn directions directly to your Pod."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                // Actions Row
-                when (state) {
-                    LinkState.CONNECTED -> {
-                        Button(
-                            onClick = { context.podStop() },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                        ) {
-                            Text("Disconnect")
+                        LinkState.CONNECTED -> {
+                            Button(
+                                onClick = { context.podStop() },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                            ) {
+                                Text("Disconnect")
+                            }
                         }
-                    }
-                    LinkState.CONNECTING, LinkState.SCANNING -> {
-                        OutlinedButton(
-                            onClick = { context.podStop() },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                        ) {
-                            Text("Cancel Search")
+                        LinkState.CONNECTING, LinkState.SCANNING -> {
+                            OutlinedButton(
+                                onClick = { context.podStop() },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                            ) {
+                                Text("Cancel Search")
+                            }
                         }
-                    }
-                    LinkState.DISCONNECTED -> {
-                        Button(
-                            onClick = { context.podStart() },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                        ) {
-                            Text("Connect to Pod")
+                        LinkState.DISCONNECTED -> {
+                            Button(
+                                onClick = { context.podStart() },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                            ) {
+                                Text("Connect to Pod")
+                            }
                         }
-                    }
-                    LinkState.BT_OFF -> {
-                        Button(
-                            onClick = { enableBt.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                        ) {
-                            Text("Turn on Bluetooth")
+                        LinkState.BT_OFF -> {
+                            Button(
+                                onClick = { enableBt.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                            ) {
+                                Text("Turn on Bluetooth")
+                            }
                         }
-                    }
-                    LinkState.NO_PERMISSIONS -> {
-                        Button(
-                            onClick = { MainActivity.gate.value = MainActivity.gate.value + 1 },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                        ) {
-                            Text("Grant Permissions")
+                        LinkState.NO_PERMISSIONS -> {
+                            Button(
+                                onClick = { MainActivity.gate.value = MainActivity.gate.value + 1 },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                            ) {
+                                Text("Grant Permissions")
+                            }
                         }
                     }
                 }
@@ -454,12 +463,18 @@ private fun PodScreen(modifier: Modifier = Modifier) {
         }
 
         // Live Trip & Navigation Dashboard Card
-        LiveTripCard()
+        item {
+            LiveTripCard()
+        }
 
         // Multi-Pod Saved Bikes Card
-        SavedPodsCard()
+        item {
+            SavedPodsCard()
+        }
 
-        Spacer(Modifier.height(110.dp))
+        item {
+            Spacer(Modifier.height(110.dp))
+        }
     }
 }
 

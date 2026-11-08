@@ -17,10 +17,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.cruiser.Session
@@ -61,27 +64,17 @@ fun Modifier.liquidGlass(
         )
     }
 
-    val sheenBrush = remember(dark) {
-        Brush.verticalGradient(
-            0.0f to Color.White.copy(alpha = if (dark) 0.08f else 0.14f),
-            0.30f to Color.Transparent,
-        )
+    return this.drawBehind {
+        val cr = CornerRadius(size.height / 2f)
+        drawRoundRect(brush = glassBackground, cornerRadius = cr)
+        drawRoundRect(brush = glassBorder, cornerRadius = cr, style = Stroke(width = borderWidth.toPx()))
     }
-
-    return this
-        .clip(shape)
-        .background(glassBackground)
-        .border(width = borderWidth, brush = glassBorder, shape = shape)
-        .drawWithContent {
-            drawContent()
-            drawRect(sheenBrush)
-        }
 }
 
 /**
  * Universal Material You + Liquid Glass Card used across Home and Settings.
  * Slopes from rich dynamic Material You colors at the top into translucent liquid glass at the bottom.
- * Caches all gradient shaders with `remember` for locked 120fps scrolling.
+ * Rendered in a single draw pass for solid 120fps scrolling.
  */
 @Composable
 fun CruiserGlassCard(
@@ -117,26 +110,13 @@ fun CruiserGlassCard(
         }
     }
 
-    val sheenBrush = remember(isGlass, dark) {
-        if (!isGlass) null
-        else {
-            Brush.verticalGradient(
-                0.0f to Color.White.copy(alpha = if (dark) 0.08f else 0.14f),
-                0.30f to Color.Transparent,
-            )
-        }
-    }
-
-    if (isGlass && glassBackground != null && glassBorder != null && sheenBrush != null) {
+    if (isGlass && glassBackground != null && glassBorder != null) {
         Box(
-            modifier = modifier
-                .clip(shape)
-                .background(glassBackground)
-                .border(width = 1.dp, brush = glassBorder, shape = shape)
-                .drawWithContent {
-                    drawContent()
-                    drawRect(sheenBrush)
-                },
+            modifier = modifier.drawBehind {
+                val cr = CornerRadius(24.dp.toPx())
+                drawRoundRect(brush = glassBackground, cornerRadius = cr)
+                drawRoundRect(brush = glassBorder, cornerRadius = cr, style = Stroke(width = 1.dp.toPx()))
+            },
         ) {
             Column(
                 modifier = Modifier.padding(18.dp),

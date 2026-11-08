@@ -5,12 +5,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -68,122 +70,135 @@ private val CYCLE_OPTIONS = listOf(
 fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
     val s by Session.settings.collectAsState()
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val comapsPerms = remember(context) { app.cruiser.notify.ComapsSource.permissions(context) }
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
+    ) { app.cruiser.notify.ComapsSource.start(context) }
+    val notifs by app.cruiser.Session.recentNotifs.collectAsState()
 
-    Column(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium)
+        item {
+            Text("Settings", style = MaterialTheme.typography.headlineMedium)
+        }
 
-        CruiserGlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(2.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Theme", style = MaterialTheme.typography.titleSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    THEME_OPTIONS.forEach { (m, label) ->
-                        FilterChip(
-                            selected = s.themeMode == m,
-                            onClick = { Session.updateSettings { it.copy(themeMode = m) } },
-                            label = { Text(label) },
-                        )
-                    }
-                }
-
-                Text("Pod night mode", style = MaterialTheme.typography.titleSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NIGHT_OPTIONS.forEach { (m, label) ->
-                        FilterChip(
-                            selected = s.nightMode == m,
-                            onClick = { Session.updateSettings { it.copy(nightMode = m) } },
-                            label = { Text(label) },
-                        )
-                    }
-                }
-
-                Text("Bottom line", style = MaterialTheme.typography.titleSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BOTTOM_OPTIONS.forEach { (m, label) ->
-                        FilterChip(
-                            selected = s.bottomMode == m,
-                            onClick = { Session.updateSettings { it.copy(bottomMode = m) } },
-                            label = { Text(label) },
-                        )
-                    }
-                }
-
-                if (s.bottomMode == Session.BottomMode.CYCLE) {
-                    Text("Cycle interval", style = MaterialTheme.typography.bodySmall)
+        item {
+            CruiserGlassCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(2.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Theme", style = MaterialTheme.typography.titleSmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CYCLE_OPTIONS.forEach { (sec, label) ->
+                        THEME_OPTIONS.forEach { (m, label) ->
                             FilterChip(
-                                selected = s.cycleIntervalSeconds == sec,
-                                onClick = { Session.updateSettings { it.copy(cycleIntervalSeconds = sec) } },
+                                selected = s.themeMode == m,
+                                onClick = { Session.updateSettings { it.copy(themeMode = m) } },
                                 label = { Text(label) },
                             )
                         }
                     }
-                }
 
-                SettingSwitch("12-hour clock", s.twelveHourClock) { v ->
-                    Session.updateSettings { it.copy(twelveHourClock = v) }
-                }
-                SettingSwitch("Imperial units", s.imperial) { v ->
-                    Session.updateSettings { it.copy(imperial = v) }
-                }
-                SettingSwitch("Liquid Glass & Specular Glare", s.liquidGlass) { v ->
-                    Session.updateSettings { it.copy(liquidGlass = v) }
+                    Text("Pod night mode", style = MaterialTheme.typography.titleSmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NIGHT_OPTIONS.forEach { (m, label) ->
+                            FilterChip(
+                                selected = s.nightMode == m,
+                                onClick = { Session.updateSettings { it.copy(nightMode = m) } },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+
+                    Text("Bottom line", style = MaterialTheme.typography.titleSmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BOTTOM_OPTIONS.forEach { (m, label) ->
+                            FilterChip(
+                                selected = s.bottomMode == m,
+                                onClick = { Session.updateSettings { it.copy(bottomMode = m) } },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+
+                    if (s.bottomMode == Session.BottomMode.CYCLE) {
+                        Text("Cycle interval", style = MaterialTheme.typography.bodySmall)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CYCLE_OPTIONS.forEach { (sec, label) ->
+                                FilterChip(
+                                    selected = s.cycleIntervalSeconds == sec,
+                                    onClick = { Session.updateSettings { it.copy(cycleIntervalSeconds = sec) } },
+                                    label = { Text(label) },
+                                )
+                            }
+                        }
+                    }
+
+                    SettingSwitch("12-hour clock", s.twelveHourClock) { v ->
+                        Session.updateSettings { it.copy(twelveHourClock = v) }
+                    }
+                    SettingSwitch("Imperial units", s.imperial) { v ->
+                        Session.updateSettings { it.copy(imperial = v) }
+                    }
+                    SettingSwitch("Liquid Glass & Specular Glare", s.liquidGlass) { v ->
+                        Session.updateSettings { it.copy(liquidGlass = v) }
+                    }
                 }
             }
         }
 
-        val context = androidx.compose.ui.platform.LocalContext.current
-        val comapsPerms = remember(context) { app.cruiser.notify.ComapsSource.permissions(context) }
         if (comapsPerms.isNotEmpty()) {
-            val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
-                androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
-            ) { app.cruiser.notify.ComapsSource.start(context) }
-            CruiserGlassCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(2.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("CoMaps integration", style = MaterialTheme.typography.titleSmall)
-                    Text("Grant CoMaps data permission to get exact turn arrows instead of text parsing.", style = MaterialTheme.typography.bodySmall)
-                    Button(onClick = { launcher.launch(comapsPerms.toTypedArray()) }) {
-                        Text("Grant permission")
+            item {
+                CruiserGlassCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(2.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("CoMaps integration", style = MaterialTheme.typography.titleSmall)
+                        Text("Grant CoMaps data permission to get exact turn arrows instead of text parsing.", style = MaterialTheme.typography.bodySmall)
+                        Button(onClick = { launcher.launch(comapsPerms.toTypedArray()) }) {
+                            Text("Grant permission")
+                        }
                     }
                 }
             }
         }
 
         if (app.cruiser.BuildConfig.DEBUG) {
-            OutlinedButton(onClick = onPlayground) { Text("Frame playground") }
-            val notifs by app.cruiser.Session.recentNotifs.collectAsState()
+            item {
+                OutlinedButton(onClick = onPlayground) { Text("Frame playground") }
+            }
             if (notifs.isNotEmpty()) {
-                CruiserGlassCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("Last nav notifications", style = MaterialTheme.typography.titleSmall)
-                            OutlinedButton(onClick = {
-                                clipboard.setText(AnnotatedString(notifs.joinToString("\n")))
-                            }) { Text("Copy") }
+                item {
+                    CruiserGlassCard(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("Last nav notifications", style = MaterialTheme.typography.titleSmall)
+                                OutlinedButton(onClick = {
+                                    clipboard.setText(AnnotatedString(notifs.joinToString("\n")))
+                                }) { Text("Copy") }
+                            }
+                            notifs.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                         }
-                        notifs.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
                 }
             }
         }
 
-        Text(
-            "Cruiser v${BuildConfig.VERSION_NAME}",
-            style = MaterialTheme.typography.bodySmall,
-        )
+        item {
+            Text(
+                "Cruiser v${BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
 
-        Spacer(Modifier.height(110.dp))
+        item {
+            Spacer(Modifier.height(110.dp))
+        }
     }
 }
 

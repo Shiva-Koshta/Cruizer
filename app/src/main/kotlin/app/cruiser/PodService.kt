@@ -189,6 +189,7 @@ class PodService : Service() {
                     if (Session.savedPods.value.none { p -> p.mac == mac }) {
                         Session.savePod(mac, "My Bike")
                     }
+                    Session.selectBike(mac)
                 }
                 handshake()
             }
@@ -480,6 +481,7 @@ class PodService : Service() {
             if (Session.savedPods.value.none { it.mac == mac }) {
                 Session.savePod(mac, "My Bike")
             }
+            Session.selectBike(mac)
         }
     }
 

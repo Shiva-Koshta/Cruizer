@@ -36,6 +36,7 @@ object Session {
     private const val KEY_CYCLE_INTERVAL = "cycle_interval"
     private const val KEY_SAVED_PODS = "saved_pods"
     private const val KEY_LIQUID_GLASS = "liquid_glass_mode"
+    private const val KEY_ACTIVE_BIKE_MAC = "active_bike_mac"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -77,6 +78,8 @@ object Session {
                         persistSavedPods(pods)
                     }
                     _savedPods.value = pods
+                    val storedActive = p[stringPreferencesKey(KEY_ACTIVE_BIKE_MAC)]
+                    activeBikeMac.value = storedActive ?: rememberedMac ?: pods.firstOrNull()?.mac
                 }
             }
         }
@@ -139,6 +142,7 @@ object Session {
 
     private val _savedPods = MutableStateFlow<List<SavedPod>>(emptyList())
     val savedPods: StateFlow<List<SavedPod>> = _savedPods
+    val activeBikeMac = MutableStateFlow<String?>(null)
 
     data class LiveRide(
         val isActive: Boolean = false,
@@ -223,19 +227,38 @@ object Session {
         val current = _savedPods.value.filter { it.mac != mac }
         val updated = current + SavedPod(mac, trimmed, model, customCc, customKmpl)
         _savedPods.value = updated
+        if (activeBikeMac.value == null || activeBikeMac.value == mac) {
+            selectBike(mac)
+        }
         persistSavedPods(updated)
+    }
+
+    fun selectBike(mac: String) {
+        if (mac.isBlank()) return
+        activeBikeMac.value = mac
+        scope.launch {
+            store?.edit {
+                it[stringPreferencesKey(KEY_ACTIVE_BIKE_MAC)] = mac
+            }
+        }
     }
 
     fun removeSavedPod(mac: String) {
         val updated = _savedPods.value.filter { it.mac != mac }
         _savedPods.value = updated
         persistSavedPods(updated)
+        if (activeBikeMac.value == mac) {
+            val fallback = updated.firstOrNull()?.mac.orEmpty()
+            if (fallback.isNotEmpty()) selectBike(fallback)
+            else activeBikeMac.value = null
+        }
     }
 
     fun activeBike(currentMac: String? = null): SavedPod? {
         val pods = _savedPods.value
         if (pods.isEmpty()) return null
-        return if (currentMac != null) pods.firstOrNull { it.mac == currentMac } ?: pods.first()
+        val target = currentMac ?: activeBikeMac.value
+        return if (target != null) pods.firstOrNull { it.mac == target } ?: pods.first()
         else pods.first()
     }
 
