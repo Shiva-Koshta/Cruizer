@@ -106,6 +106,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Request 120Hz display refresh rate and touch frame rate boost for GrapheneOS & Pixel
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            window.attributes = window.attributes.apply {
+                preferredRefreshRate = 120f
+            }
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 35) {
+            window.setFrameRateBoostOnTouchEnabled(true)
+            window.decorView.setRequestedFrameRate(120f)
+        }
         // Settings persist from here, not from the Pod service, so theme changes
         // survive even when the rider never connects.
         Session.init(applicationContext)
@@ -131,6 +141,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (android.os.Build.VERSION.SDK_INT >= 35) {
+            window.decorView.setRequestedFrameRate(120f)
+        }
         if (!Session.onboardingCompleted.value && !isReady()) {
             gate.value = gate.value + 1 // permission state may have changed off-screen
         }
@@ -182,31 +195,28 @@ class MainActivity : ComponentActivity() {
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
             // Main content: HorizontalPager holding Bike (0) and Settings (1)
-            val mainContentModifier = if (backProgress > 0f) {
-                Modifier
+            Box(
+                modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        if (inPlayground) {
+                        if (inPlayground && backProgress > 0f) {
                             val scale = 0.94f + (backProgress * 0.06f)
                             scaleX = scale
                             scaleY = scale
-                        } else if (pagerState.settledPage != 0) {
+                        } else if (!inPlayground && pagerState.settledPage != 0 && backProgress > 0f) {
                             translationX = backProgress * size.width * 0.25f
                         }
                     }
                     .drawWithContent {
                         drawContent()
-                        if (inPlayground) {
+                        if (inPlayground && backProgress > 0f) {
                             drawRect(Color.Black.copy(alpha = (1f - backProgress) * 0.20f))
                         }
-                    }
-            } else {
-                Modifier.fillMaxSize()
-            }
-
-            Box(modifier = mainContentModifier) {
+                    },
+            ) {
                 HorizontalPager(
                     state = pagerState,
+                    beyondViewportPageCount = 1,
                     modifier = Modifier.fillMaxSize(),
                 ) { pageIndex ->
                     when (pageIndex) {

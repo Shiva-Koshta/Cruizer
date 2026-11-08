@@ -64,10 +64,15 @@ fun Modifier.liquidGlass(
         )
     }
 
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val stroke = remember(density, borderWidth) {
+        Stroke(width = with(density) { borderWidth.toPx() })
+    }
+
     return this.drawBehind {
         val cr = CornerRadius(size.height / 2f)
         drawRoundRect(brush = glassBackground, cornerRadius = cr)
-        drawRoundRect(brush = glassBorder, cornerRadius = cr, style = Stroke(width = borderWidth.toPx()))
+        drawRoundRect(brush = glassBorder, cornerRadius = cr, style = stroke)
     }
 }
 
@@ -110,12 +115,19 @@ fun CruiserGlassCard(
         }
     }
 
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val cardStroke = remember(density) {
+        Stroke(width = with(density) { 1.dp.toPx() })
+    }
+    val cardCornerRadius = remember(density) {
+        CornerRadius(with(density) { 24.dp.toPx() })
+    }
+
     if (isGlass && glassBackground != null && glassBorder != null) {
         Box(
             modifier = modifier.drawBehind {
-                val cr = CornerRadius(24.dp.toPx())
-                drawRoundRect(brush = glassBackground, cornerRadius = cr)
-                drawRoundRect(brush = glassBorder, cornerRadius = cr, style = Stroke(width = 1.dp.toPx()))
+                drawRoundRect(brush = glassBackground, cornerRadius = cardCornerRadius)
+                drawRoundRect(brush = glassBorder, cornerRadius = cardCornerRadius, style = cardStroke)
             },
         ) {
             Column(
