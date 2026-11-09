@@ -116,7 +116,8 @@ object NavTextParser {
             ?.takeIf { it in 1..9 }
         val maps3 = MAPS_BOTTOM_3.find(lower)
         val mapsBottom = maps3 ?: MAPS_BOTTOM.find(lower)
-        val kind = kindOf(lower)
+        // Maps' subText "Arrive 10:20" is the ETA, not a destination maneuver.
+        val kind = kindOf(ARRIVAL.replace(lower, " "))
         return TurnUpdate(
             kind = kind,
             distanceM = distance,

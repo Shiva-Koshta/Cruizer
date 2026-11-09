@@ -6,6 +6,7 @@ import site.casiopea.cruizer.proto.TurnKind
 import java.util.Calendar
 import java.util.GregorianCalendar
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -70,6 +71,23 @@ class NavTextParserTest {
     fun mapsStandaloneMinutes() {
         val p = NavTextParser.parse("Continue straight\n24 min") as Parsed.Turn
         assertEquals(24 * 60, p.update.remainingSeconds)
+    }
+
+    @Test
+    fun mapsEtaLineIsNotArrival() {
+        // Live Maps notification: title "Head east", subText "Arrive 10:20".
+        // "arrive" must not turn this into DESTINATION, or the route ends on the spot.
+        val p = NavTextParser.parse("Head east\nArrive 10:20", now(10, 0)) as Parsed.Turn
+        assertEquals(TurnKind.DEPART, p.update.kind)
+        assertFalse(p.update.ended)
+        assertEquals(20 * 60, p.update.arrivalSecondsFromNow)
+    }
+
+    @Test
+    fun arrivedEndsRoute() {
+        val p = NavTextParser.parse("You have arrived\nKazhakootam") as Parsed.Turn
+        assertEquals(TurnKind.DESTINATION, p.update.kind)
+        assertTrue(p.update.ended)
     }
 
     @Test
