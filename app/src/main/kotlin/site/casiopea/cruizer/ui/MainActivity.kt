@@ -181,6 +181,7 @@ class MainActivity : ComponentActivity() {
         var inPlayground by remember { mutableStateOf(false) }
 
         var backProgress by remember { mutableFloatStateOf(0f) }
+        var backGestureActive by remember { mutableStateOf(false) }
 
         val lockoutNestedScroll = remember {
             object : NestedScrollConnection {
@@ -200,18 +201,38 @@ class MainActivity : ComponentActivity() {
         val isBackEnabled = inPlayground || pagerState.settledPage != 0
         PredictiveBackHandler(enabled = isBackEnabled) { progress: Flow<BackEventCompat> ->
             val fromPlayground = inPlayground
+            backGestureActive = true
             try {
                 progress.collect { backEvent ->
                     backProgress = backEvent.progress
+                    // Drive the pager itself so the Bike screen is revealed underneath.
+                    if (!fromPlayground) {
+                        pagerState.requestScrollToPage(0, 1f - backEvent.progress)
+                    }
                 }
                 if (fromPlayground) {
                     inPlayground = false
+                    backProgress = 0f
+                    backGestureActive = false
                 } else {
-                    scope.launch { pagerState.animateScrollToPage(0) }
+                    scope.launch {
+                        pagerState.animateScrollToPage(0)
+                        backProgress = 0f
+                        backGestureActive = false
+                    }
                 }
             } catch (_: CancellationException) {
-            } finally {
-                backProgress = 0f
+                // Gesture cancelled: unwind the pager without snapping the parallax.
+                if (fromPlayground) {
+                    backProgress = 0f
+                    backGestureActive = false
+                } else {
+                    scope.launch {
+                        pagerState.animateScrollToPage(1)
+                        backProgress = 0f
+                        backGestureActive = false
+                    }
+                }
             }
         }
 
@@ -221,29 +242,74 @@ class MainActivity : ComponentActivity() {
                 .background(MaterialTheme.colorScheme.background)
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
-            // Main content: HorizontalPager holding Bike (0) and Settings (1)
-            val pagerModifier = if (backProgress > 0f && !inPlayground) {
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        translationX = backProgress * size.width * 0.25f
-                    }
-                    .nestedScroll(lockoutNestedScroll)
-            } else {
-                Modifier
-                    .fillMaxSize()
-                    .nestedScroll(lockoutNestedScroll)
-            }
+            // Under the playground overlay the pager is the previous screen: slow pull-out.
+            val pagerModifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val under = inPlayground && backGestureActive
+                    translationX = if (under) -(1f - backProgress) * size.width * 0.25f else 0f
+                    val scale = if (under) 0.94f + 0.06f * backProgress else 1f
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .nestedScroll(lockoutNestedScroll)
 
+            // Read from the pager, not the gesture, so the parallax stays smooth while it settles.
+            val gestureProgress = if (backGestureActive && !inPlayground) {
+                (1f - (pagerState.currentPage + pagerState.currentPageOffsetFraction))
+                    .coerceIn(0f, 1f)
+            } else 0f
+
+            // Main content: HorizontalPager holding Bike (0) and Settings (1)
             HorizontalPager(
                 state = pagerState,
                 beyondViewportPageCount = 1,
                 modifier = pagerModifier,
             ) { pageIndex ->
-                when (pageIndex) {
-                    0 -> PodScreen()
-                    1 -> SettingsScreen(onPlayground = { inPlayground = true })
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val active = !inPlayground && backGestureActive
+                            if (active && pageIndex == 0) {
+                                // Previous screen: pulls out from -25% and scales up to 1.
+                                translationX = (1f - gestureProgress) * size.width * 0.75f
+                                val scale = 0.94f + 0.06f * gestureProgress
+                                scaleX = scale
+                                scaleY = scale
+                            } else {
+                                translationX = 0f
+                                scaleX = 1f
+                                scaleY = 1f
+                            }
+                            // Current screen: rounds and lifts as it slides right.
+                            val lifted = active && pageIndex == 1 && gestureProgress > 0f
+                            clip = lifted
+                            shadowElevation = if (lifted) 16.dp.toPx() else 0f
+                            if (lifted) shape = RoundedCornerShape((gestureProgress * 24f).dp)
+                        },
+                ) {
+                    when (pageIndex) {
+                        0 -> PodScreen()
+                        1 -> SettingsScreen(onPlayground = { inPlayground = true })
+                    }
+                    if (!inPlayground && backGestureActive && pageIndex == 0) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = (1f - gestureProgress) * 0.25f)),
+                        )
+                    }
                 }
+            }
+
+            // Dim the previous screen while the playground slides away.
+            if (inPlayground && backGestureActive) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = (1f - backProgress) * 0.25f)),
+                )
             }
 
             // Playground overlay screen (with 120fps hardware-accelerated slide)
@@ -254,11 +320,10 @@ class MainActivity : ComponentActivity() {
                         .background(MaterialTheme.colorScheme.background)
                         .graphicsLayer {
                             translationX = backProgress * size.width
-                            if (backProgress > 0f) {
-                                clip = true
-                                shape = RoundedCornerShape(20.dp)
-                                shadowElevation = 16.dp.toPx()
-                            }
+                            val lifted = backProgress > 0f
+                            clip = lifted
+                            shadowElevation = if (lifted) 16.dp.toPx() else 0f
+                            if (lifted) shape = RoundedCornerShape((backProgress * 24f).dp)
                         },
                 ) {
                     PlaygroundScreen(onBack = { inPlayground = false })
