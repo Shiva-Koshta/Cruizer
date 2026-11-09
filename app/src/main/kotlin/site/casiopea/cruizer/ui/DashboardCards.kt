@@ -3,6 +3,7 @@ package site.casiopea.cruizer.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,12 +24,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,17 +60,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import site.casiopea.cruizer.Session
 import site.casiopea.cruizer.ble.LinkState
+import site.casiopea.cruizer.proto.Icons as PodIcons
+import site.casiopea.cruizer.proto.PodProtocol
 import site.casiopea.cruizer.proto.TurnKind
 import site.casiopea.cruizer.proto.TurnUpdate
 import kotlinx.coroutines.delay
 import java.util.Locale
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Expressive live trip & navigation dashboard card for the Home tab.
@@ -75,7 +90,7 @@ import java.util.Locale
 fun LiveTripCard(modifier: Modifier = Modifier) {
     val liveRide by Session.liveRide.collectAsState()
     val turn by Session.currentTurn.collectAsState()
-    val navActive by Session.navActive.collectAsState()
+    val podScreen by Session.podScreen.collectAsState()
     val settings by Session.settings.collectAsState()
     val savedPods by Session.savedPods.collectAsState()
     val activeMac by Session.activeBikeMac.collectAsState()
@@ -116,10 +131,8 @@ fun LiveTripCard(modifier: Modifier = Modifier) {
                 }
             }
 
-            // Live Navigation Instructions (matching what the Pod displays)
-            if (turn != null || navActive) {
-                NavigationPreviewSection(turn = turn, imperial = settings.imperial)
-            }
+            // Mirror of the Pod's screen (exactly the frame the service is sending)
+            podScreen?.let { NavigationPreviewSection(screen = it, turn = turn) }
 
             // Live Automatic Ride Metrics (Distance, Time, Speed, Avg Speed, Fuel)
             LiveRideMetricsSection(
@@ -132,102 +145,216 @@ fun LiveTripCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun NavigationPreviewSection(turn: TurnUpdate?, imperial: Boolean) {
+private fun NavigationPreviewSection(screen: PodProtocol.PodScreen, turn: TurnUpdate?) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                // Large Arrow Graphic Symbol
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(52.dp),
+                    modifier = Modifier.size(64.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = turnEmoji(turn?.kind),
-                            fontSize = 26.sp,
+                        ManeuverGlyph(
+                            code = screen.maneuver,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(42.dp),
                         )
                     }
                 }
 
-                Column(modifier = Modifier.weight(1f)) {
-                    val distStr = turn?.distanceM?.let { m ->
-                        if (!imperial) {
-                            if (m >= 1000) "%.1f km".format(Locale.US, m / 1000f) else "$m m"
-                        } else {
-                            val ft = (m * 3.281).toInt()
-                            if (ft > 550) "%.1f mi".format(Locale.US, m * 0.000621371f) else "$ft ft"
-                        }
-                    } ?: "Route Live"
-
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
                     Text(
-                        text = distStr,
+                        text = screen.distance.ifEmpty { "Route live" },
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-
-                    val label = when (turn?.kind) {
-                        TurnKind.LEFT -> "Turn left"
-                        TurnKind.RIGHT -> "Turn right"
-                        TurnKind.SLIGHT_LEFT -> "Slight left"
-                        TurnKind.SLIGHT_RIGHT -> "Slight right"
-                        TurnKind.SHARP_LEFT -> "Sharp left"
-                        TurnKind.SHARP_RIGHT -> "Sharp right"
-                        TurnKind.U_TURN -> "U-Turn"
-                        TurnKind.ROUNDABOUT -> "Roundabout" + (turn.exit?.let { " (Exit $it)" } ?: "")
-                        TurnKind.STRAIGHT -> "Continue straight"
-                        TurnKind.DEPART -> "Depart / Head out"
-                        TurnKind.DESTINATION -> "Arrived at destination"
-                        TurnKind.RE_ROUTE -> "Recalculating route…"
-                        else -> "Following route"
-                    }
                     Text(
-                        text = label,
+                        text = maneuverLabel(screen.maneuver, turn),
                         style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                ) {
+                    Text(
+                        text = if (screen.night) "Night" else "Day",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
-            // Bottom Metrics Row (ETA, Remaining Time, Distance to Target)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                turn?.arrivalSecondsFromNow?.let { sec ->
-                    MetricChip(
-                        label = "ETA",
-                        value = formatClock(sec),
-                    )
-                }
-                turn?.remainingSeconds?.let { sec ->
-                    MetricChip(
-                        label = "Time Left",
-                        value = formatDuration(sec.toLong()),
-                    )
-                }
-                turn?.routeRemainingM?.let { m ->
-                    val dist = if (!imperial) "%.1f km".format(Locale.US, m / 1000f)
-                    else "%.1f mi".format(Locale.US, m * 0.000621371f)
-                    MetricChip(
-                        label = "Remaining",
-                        value = dist,
-                    )
-                }
+                Text(
+                    "Pod bottom line",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    screen.bottom ?: "blank",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                )
             }
         }
     }
+}
+
+private fun maneuverLabel(code: Int, turn: TurnUpdate?): String {
+    if (code == PodIcons.ROUTE_STARTED.code) return "Route started"
+    return when (turn?.kind) {
+        TurnKind.LEFT -> "Turn left"
+        TurnKind.RIGHT -> "Turn right"
+        TurnKind.SLIGHT_LEFT -> "Slight left"
+        TurnKind.SLIGHT_RIGHT -> "Slight right"
+        TurnKind.SHARP_LEFT -> "Sharp left"
+        TurnKind.SHARP_RIGHT -> "Sharp right"
+        TurnKind.KEEP_LEFT -> "Keep left"
+        TurnKind.KEEP_RIGHT -> "Keep right"
+        TurnKind.MERGE_LEFT -> "Merge left"
+        TurnKind.MERGE_RIGHT -> "Merge right"
+        TurnKind.FORK_LEFT -> "Fork left"
+        TurnKind.FORK_RIGHT -> "Fork right"
+        TurnKind.OFF_RAMP_LEFT -> "Exit left"
+        TurnKind.OFF_RAMP_RIGHT -> "Exit right"
+        TurnKind.ON_RAMP -> "On-ramp"
+        TurnKind.FERRY -> "Ferry"
+        TurnKind.U_TURN -> "U-turn"
+        TurnKind.ROUNDABOUT -> "Roundabout" + (turn?.exit?.let { " (exit $it)" } ?: "")
+        TurnKind.STRAIGHT -> "Continue straight"
+        TurnKind.DEPART -> "Depart / head out"
+        TurnKind.DESTINATION -> "Arrived at destination"
+        TurnKind.RE_ROUTE -> "Recalculating route…"
+        else -> "Following route"
+    }
+}
+
+/** Pod maneuver glyph drawn from the icon code the frame actually carries. */
+@Composable
+private fun ManeuverGlyph(code: Int, color: Color, modifier: Modifier = Modifier) {
+    when (code) {
+        PodIcons.DESTINATION.code, PodIcons.DESTINATION_LEFT.code, PodIcons.DESTINATION_RIGHT.code ->
+            Icon(Icons.Filled.Place, contentDescription = null, tint = color, modifier = modifier)
+        PodIcons.RE_ROUTE.code ->
+            Icon(Icons.Filled.Refresh, contentDescription = null, tint = color, modifier = modifier)
+        PodIcons.CALL.code ->
+            Icon(Icons.Filled.Call, contentDescription = null, tint = color, modifier = modifier)
+        PodIcons.LOW_BATTERY.code ->
+            Icon(Icons.Filled.Warning, contentDescription = null, tint = color, modifier = modifier)
+        PodIcons.ROUTE_STARTED.code ->
+            Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = color, modifier = modifier)
+        else -> Canvas(modifier) {
+            val roundabout = code == PodIcons.ROUNDABOUT_CW.code ||
+                code == PodIcons.ROUNDABOUT_CCW.code ||
+                code in PodIcons.ROUNDABOUT_EXIT_FIRST.code..(PodIcons.ROUNDABOUT_EXIT_FIRST.code + 8)
+            if (roundabout) drawRoundabout(color) else drawTurnArrow(turnAngle(code), color)
+        }
+    }
+}
+
+private fun turnAngle(code: Int): Float = when (code) {
+    PodIcons.TURN_LEFT.code, PodIcons.FORK_LEFT.code, PodIcons.MERGE_LEFT.code,
+    PodIcons.OFF_RAMP_LEFT.code, PodIcons.KEEP_LANE_LEFT.code, PodIcons.ON_RAMP_LEFT.code -> -90f
+    PodIcons.TURN_RIGHT.code, PodIcons.FORK_RIGHT.code, PodIcons.MERGE_RIGHT.code,
+    PodIcons.OFF_RAMP_RIGHT.code, PodIcons.KEEP_LANE_RIGHT.code, PodIcons.ON_RAMP_RIGHT.code -> 90f
+    PodIcons.SLIGHT_LEFT.code, PodIcons.ON_RAMP_SLIGHT_LEFT.code,
+    PodIcons.OFF_RAMP_SLIGHT_LEFT.code -> -45f
+    PodIcons.SLIGHT_RIGHT.code, PodIcons.ON_RAMP_SLIGHT_RIGHT.code,
+    PodIcons.OFF_RAMP_SLIGHT_RIGHT.code -> 45f
+    PodIcons.SHARP_LEFT.code, PodIcons.ON_RAMP_SHARP_LEFT.code,
+    PodIcons.OFF_RAMP_KEEP_SHARP_LEFT.code -> -135f
+    PodIcons.SHARP_RIGHT.code, PodIcons.ON_RAMP_SHARP_RIGHT.code,
+    PodIcons.OFF_RAMP_KEEP_SHARP_RIGHT.code -> 135f
+    PodIcons.U_TURN_CW.code, PodIcons.U_TURN_CCW.code -> 180f
+    else -> 0f
+}
+
+private fun DrawScope.drawTurnArrow(angleDeg: Float, color: Color) {
+    val w = size.minDimension
+    val h = size.height
+    val cx = size.width / 2f
+    val head = w * 0.26f
+    val stroke = Stroke(width = w * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    if (angleDeg == 0f) {
+        drawLine(color, Offset(cx, h * 0.95f), Offset(cx, h * 0.28f), w * 0.11f, StrokeCap.Round)
+        drawArrowHead(Offset(cx, h * 0.18f), 0f, head, color)
+        return
+    }
+    if (angleDeg == 180f) {
+        val r = w * 0.22f
+        val path = Path().apply {
+            moveTo(cx + r, h * 0.95f)
+            lineTo(cx + r, h * 0.45f)
+            arcTo(Rect(cx - r, h * 0.45f - r, cx + r, h * 0.45f + r), 0f, -180f, false)
+            lineTo(cx - r, h * 0.62f)
+        }
+        drawPath(path, color, style = stroke)
+        drawArrowHead(Offset(cx - r, h * 0.70f), 180f, head, color)
+        return
+    }
+    val bendY = h * 0.46f
+    val rad = Math.toRadians(90.0 - angleDeg)
+    val end = Offset(
+        cx + cos(rad).toFloat() * w * 0.30f,
+        bendY - sin(rad).toFloat() * w * 0.30f,
+    )
+    val path = Path().apply {
+        moveTo(cx, h * 0.95f)
+        lineTo(cx, bendY + w * 0.14f)
+        quadraticBezierTo(cx, bendY, end.x, end.y)
+    }
+    drawPath(path, color, style = stroke)
+    drawArrowHead(end, angleDeg, head, color)
+}
+
+private fun DrawScope.drawRoundabout(color: Color) {
+    val r = size.minDimension * 0.28f
+    drawCircle(color, radius = r, style = Stroke(size.minDimension * 0.10f))
+    drawArrowHead(
+        Offset(center.x, center.y - r - size.minDimension * 0.04f),
+        0f,
+        size.minDimension * 0.26f,
+        color,
+    )
+}
+
+private fun DrawScope.drawArrowHead(tip: Offset, angleDeg: Float, sizePx: Float, color: Color) {
+    val rad = Math.toRadians(angleDeg.toDouble())
+    val ux = sin(rad).toFloat()
+    val uy = -cos(rad).toFloat()
+    val base = Offset(tip.x - ux * sizePx, tip.y - uy * sizePx)
+    val half = sizePx * 0.62f
+    drawPath(
+        Path().apply {
+            moveTo(tip.x, tip.y)
+            lineTo(base.x - uy * half, base.y + ux * half)
+            lineTo(base.x + uy * half, base.y - ux * half)
+            close()
+        },
+        color,
+    )
 }
 
 @Composable
@@ -565,22 +692,6 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
             },
         )
     }
-}
-
-private fun turnEmoji(kind: TurnKind?): String = when (kind) {
-    TurnKind.LEFT -> "⬅️"
-    TurnKind.RIGHT -> "➡️"
-    TurnKind.SLIGHT_LEFT, TurnKind.KEEP_LEFT -> "↖️"
-    TurnKind.SLIGHT_RIGHT, TurnKind.KEEP_RIGHT -> "↗️"
-    TurnKind.SHARP_LEFT -> "↙️"
-    TurnKind.SHARP_RIGHT -> "↘️"
-    TurnKind.U_TURN -> "🔄"
-    TurnKind.STRAIGHT -> "⬆️"
-    TurnKind.ROUNDABOUT -> "⭕"
-    TurnKind.DEPART -> "🏁"
-    TurnKind.DESTINATION -> "🎯"
-    TurnKind.RE_ROUTE -> "🧭"
-    else -> "⬆️"
 }
 
 private fun formatDuration(seconds: Long): String {
