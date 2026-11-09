@@ -319,6 +319,9 @@ object Session {
     /** A nav app has an ongoing navigation notification (even before any turn text). */
     val navActive = MutableStateFlow(false)
 
+    /** Exactly what the Pod is showing right now (null = clock/PING). Set by the service. */
+    val podScreen = MutableStateFlow<site.casiopea.cruizer.proto.PodProtocol.PodScreen?>(null)
+
     fun postTurn(t: TurnUpdate?) {
         if (BuildConfig.DEBUG) {
             Log.i(

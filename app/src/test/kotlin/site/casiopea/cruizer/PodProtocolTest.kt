@@ -3,6 +3,7 @@ package site.casiopea.cruizer
 import site.casiopea.cruizer.proto.Icons
 import site.casiopea.cruizer.proto.PodProtocol
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -173,5 +174,23 @@ class PodProtocolTest {
         assertEquals(0xFF, f[12].toInt() and 0xFF)
         assertEquals(0xFF, f[13].toInt() and 0xFF)
         assertEquals(crcOf(f), PodProtocol.crc16(f.copyOfRange(0, 18)))
+    }
+
+    @Test
+    fun `distance label mirrors the encoded unit`() {
+        assertEquals("250 m", PodProtocol.distanceLabel(250, 1))
+        assertEquals("1.2 km", PodProtocol.distanceLabel(12, 2))
+        assertEquals("0.3 mi", PodProtocol.distanceLabel(3, 3))
+        assertEquals("500 ft", PodProtocol.distanceLabel(500, 4))
+    }
+
+    @Test
+    fun `bottom label mirrors the sent bottom line`() {
+        val now = java.util.GregorianCalendar(2026, java.util.Calendar.NOVEMBER, 7, 10, 0).timeInMillis
+        assertEquals("10:20", PodProtocol.bottomLabel(PodProtocol.Bottom.Arrival(20 * 60, false), now))
+        assertEquals("10:20 AM", PodProtocol.bottomLabel(PodProtocol.Bottom.Arrival(20 * 60, true), now))
+        assertEquals("1:05", PodProtocol.bottomLabel(PodProtocol.Bottom.Remaining(3900), now))
+        assertEquals("1.2 km", PodProtocol.bottomLabel(PodProtocol.Bottom.Total(1234, false), now))
+        assertNull(PodProtocol.bottomLabel(PodProtocol.Bottom.None, now))
     }
 }

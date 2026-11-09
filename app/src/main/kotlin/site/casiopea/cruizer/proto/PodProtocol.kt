@@ -118,6 +118,60 @@ object PodProtocol {
         data object None : Bottom
     }
 
+    /** What the Pod's screen currently shows — the app mirrors this instead of re-deriving it. */
+    data class PodScreen(
+        val maneuver: Int,
+        val distance: String,
+        val bottom: String?,
+        val night: Boolean,
+    )
+
+    /** Human text for the encoded distance the Pod actually receives. */
+    fun distanceLabel(value: Int, unit: Int): String = when (unit) {
+        1 -> "$value m"
+        2 -> "%.1f km".format(java.util.Locale.US, value / 10f)
+        3 -> "%.1f mi".format(java.util.Locale.US, value / 10f)
+        else -> "$value ft"
+    }
+
+    /** Human text for the Pod's bottom line, matching the bytes [navFrame] sends. */
+    fun bottomLabel(bottom: Bottom, now: Long): String? = when (bottom) {
+        is Bottom.Arrival -> {
+            val cal = java.util.Calendar.getInstance().apply {
+                timeInMillis = now
+                add(java.util.Calendar.SECOND, bottom.secondsFromNow)
+            }
+            val h24 = cal.get(java.util.Calendar.HOUR_OF_DAY)
+            val m = cal.get(java.util.Calendar.MINUTE)
+            if (!bottom.is12hFormat) {
+                "%02d:%02d".format(java.util.Locale.US, h24, m)
+            } else {
+                "%d:%02d %s".format(
+                    java.util.Locale.US,
+                    if (h24 % 12 == 0) 12 else h24 % 12,
+                    m,
+                    if (h24 < 12) "AM" else "PM",
+                )
+            }
+        }
+        is Bottom.Remaining ->
+            "%d:%02d".format(java.util.Locale.US, (bottom.seconds / 3600).coerceAtMost(63), bottom.seconds % 3600 / 60)
+        is Bottom.Total -> encodeDistance(bottom.meters, bottom.imperial).let { distanceLabel(it[0], it[1]) }
+        Bottom.None -> null
+    }
+
+    fun podScreen(
+        maneuver: Int,
+        distanceM: Int,
+        imperial: Boolean,
+        bottom: Bottom,
+        night: Boolean,
+        now: Long,
+    ): PodScreen {
+        val d = encodeDistance(distanceM, imperial)
+        return PodScreen(maneuver, distanceLabel(d[0], d[1]), bottomLabel(bottom, now), night)
+    }
+
     /**
      * Navigation frame (0x10 0x11). exitRoundabout: 1-based exit when emitting a roundabout,
      * else 0. nextDistanceOnlyNear mirrors the RE app (next data only when intensity < 5).

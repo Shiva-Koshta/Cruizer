@@ -201,6 +201,7 @@ class PodService : Service() {
                 lastFrameSentAt = 0
                 sentSplash = false
                 lastTurn = Session.currentTurn.value
+                Session.podScreen.value = null
                 awaitPin(false)
             }
         }.launchIn(scope)
@@ -217,9 +218,7 @@ class PodService : Service() {
             // Fire the route splash the instant nav data lands instead of waiting
             // for the next 1 Hz tick (up to a second of dead Pod screen).
             if (t != null && !sentSplash && link.state.value == LinkState.CONNECTED) {
-                link.send(PodProtocol.routeStartedFrame(currentNight()))
-                sentSplash = true
-                lastFrameSentAt = System.currentTimeMillis()
+                sendRouteStarted()
                 if (BuildConfig.DEBUG) Log.i("CruizerNav", "routeStarted frame sent (on turn)")
             }
         }.launchIn(scope)
@@ -325,9 +324,10 @@ class PodService : Service() {
                 if (Session.navActive.value) {
                     // Route is live but has no instruction yet: keep the Pod on
                     // the route-started icon instead of its clock screen.
-                    link.send(PodProtocol.routeStartedFrame(night))
+                    sendRouteStarted()
                 } else {
                     link.send(PodProtocol.PING_FW)
+                    Session.podScreen.value = null // Pod is on its clock face
                 }
                 lastFrameSentAt = now
             }
@@ -338,13 +338,19 @@ class PodService : Service() {
             return
         }
         if (!sentSplash) {
-            link.send(PodProtocol.routeStartedFrame(night))
-            sentSplash = true
-            lastFrameSentAt = now
+            sendRouteStarted()
             if (BuildConfig.DEBUG) Log.i("CruizerNav", "routeStarted frame sent")
             return
         }
         renderNavFrame(turn, night, now)
+    }
+
+    /** Route-started splash + the matching mirror state. */
+    private fun sendRouteStarted() {
+        link.send(PodProtocol.routeStartedFrame(currentNight()))
+        Session.podScreen.value = PodProtocol.PodScreen(Icons.ROUTE_STARTED.code, "", null, currentNight())
+        sentSplash = true
+        lastFrameSentAt = System.currentTimeMillis()
     }
 
     private fun renderNavFrame(turn: TurnUpdate, night: Boolean, now: Long) {
@@ -389,6 +395,8 @@ class PodService : Service() {
             exit = if (turn.exit != null) turn.exit else 0,
         )
         link.send(f)
+        Session.podScreen.value =
+            PodProtocol.podScreen(maneuver, turn.distanceM ?: 0, s.imperial, bottom, night, now)
         if (BuildConfig.DEBUG) Log.i("CruizerNav", "nav frame: " + f.joinToString(" ") { "%02X".format(it) })
         lastFrameSentAt = now
     }
@@ -401,10 +409,7 @@ class PodService : Service() {
         val turn = Session.currentTurn.value
         when {
             turn != null && !turn.ended -> renderNavFrame(turn, currentNight(), now)
-            Session.navActive.value -> {
-                link.send(PodProtocol.routeStartedFrame(currentNight()))
-                lastFrameSentAt = now
-            }
+            Session.navActive.value -> sendRouteStarted()
         }
     }
 
