@@ -24,6 +24,11 @@ class TurnSource : NotificationListenerService() {
             "com.waze",
         )
 
+        // Debug-only: dump the full notification payload for these packages.
+        private val PROBE_PACKAGES = setOf(
+            "net.osmand", "app.organicmaps", "app.comaps", "com.google.android.apps.maps",
+        )
+
         fun rebind(context: Context) {
             runCatching {
                 requestRebind(ComponentName(context, TurnSource::class.java))
@@ -83,6 +88,9 @@ class TurnSource : NotificationListenerService() {
 
     private fun tryParse(sbn: StatusBarNotification) {
         if (!isNavSource(sbn)) return
+        if (site.casiopea.cruizer.BuildConfig.DEBUG && PROBE_PACKAGES.any(sbn.packageName::startsWith)) {
+            dumpExtras(sbn)
+        }
         // CoMaps publishes structured turn data via ContentProvider (ComapsSource);
         // ignore its notification so coarse text parsing cannot clobber it.
         if (sbn.packageName.startsWith("app.comaps") &&
@@ -124,6 +132,38 @@ class TurnSource : NotificationListenerService() {
             }
             is NavTextParser.Parsed.Camera -> {}
             NavTextParser.Parsed.Idle -> {}
+        }
+    }
+
+    private fun dumpExtras(sbn: StatusBarNotification) {
+        val extras = sbn.notification.extras
+        val sb = StringBuilder("PROBE ${sbn.packageName} extras: ")
+        for (k in extras.keySet().sorted()) {
+            val v = extras.get(k)
+            when (v) {
+                is android.os.Bundle -> {
+                    sb.append("$k=Bundle{")
+                    for (kk in v.keySet().sorted()) sb.append("$kk=${v.get(kk)}; ")
+                    sb.append("} ")
+                }
+                is java.util.ArrayList<*> -> {
+                    sb.append("$k=List[${v.size}]{")
+                    v.forEach { item ->
+                        if (item is android.os.Bundle) {
+                            for (kk in item.keySet().sorted()) sb.append("$kk=${item.get(kk)}; ")
+                        } else sb.append("$item; ")
+                    }
+                    sb.append("} ")
+                }
+                else -> sb.append("$k=$v; ")
+            }
+        }
+        Session.captureNotif(sb.toString())
+        if (sbn.packageName == "com.google.android.apps.maps") {
+            val matched = runCatching {
+                GoogleMapsIconMatcher.matchIcon(sbn.notification.getLargeIcon(), this)
+            }.getOrNull() ?: site.casiopea.cruizer.proto.TurnKind.UNKNOWN
+            Session.captureNotif("PROBE maps icon=$matched")
         }
     }
 
