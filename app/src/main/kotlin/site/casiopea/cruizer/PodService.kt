@@ -95,17 +95,15 @@ class PodService : Service() {
             var reconnectCountdown = 0
             var failedDirect = 0
             var disconnectedMs = 0L
+            var everConnected = false
             while (isActive) {
                 if (link.state.value != LinkState.CONNECTED) {
                     val timeoutMinutes = Session.settings.value.disconnectTimeoutMinutes
-                    if (timeoutMinutes == 0) {
-                        if (BuildConfig.DEBUG) Log.i("CruizerNav", "stopping: timeout set to 0")
-                        stopSelf()
-                        break
-                    }
                     disconnectedMs += CONNECT_PAUSE_MS
+                    // 0 = stop on the first tick after a real disconnect, but still
+                    // allow the initial Connect attempt to scan.
                     val maxDisconnectedMs = timeoutMinutes * 60 * 1000L
-                    if (disconnectedMs > maxDisconnectedMs) {
+                    if (disconnectedMs > maxDisconnectedMs && (timeoutMinutes > 0 || everConnected)) {
                         if (BuildConfig.DEBUG) Log.i("CruizerNav", "stopping: no Pod for $timeoutMinutes min")
                         stopSelf()
                         break
@@ -126,6 +124,7 @@ class PodService : Service() {
                     reconnectCountdown = 0
                     failedDirect = 0
                     disconnectedMs = 0
+                    everConnected = true
                 }
                 val now = System.currentTimeMillis()
                 if (link.state.value == LinkState.CONNECTED) tick()
