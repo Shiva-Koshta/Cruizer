@@ -56,9 +56,6 @@ class PodService : Service() {
         private const val KEY_PAIRED = "pod_paired"
         private const val CONNECT_PAUSE_MS = 1000L
         private const val RESUME_PREAMBLE_MS = 200L
-
-        /** Don't keep the foreground process alive forever with no Pod around. */
-        private const val STOP_AFTER_DISCONNECTED_MS = 5 * 60 * 1000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -100,11 +97,16 @@ class PodService : Service() {
             var disconnectedMs = 0L
             while (isActive) {
                 if (link.state.value != LinkState.CONNECTED) {
+                    val timeoutMinutes = Session.settings.value.disconnectTimeoutMinutes
+                    if (timeoutMinutes == 0) {
+                        if (BuildConfig.DEBUG) Log.i("CruizerNav", "stopping: timeout set to 0")
+                        stopSelf()
+                        break
+                    }
                     disconnectedMs += CONNECT_PAUSE_MS
-                    if (disconnectedMs > STOP_AFTER_DISCONNECTED_MS) {
-                        // Pod never showed up (ignition off / forgotten) — don't
-                        // burn battery scanning all day. "Connect" revives this.
-                        if (BuildConfig.DEBUG) Log.i("CruizerNav", "stopping: no Pod for 5 min")
+                    val maxDisconnectedMs = timeoutMinutes * 60 * 1000L
+                    if (disconnectedMs > maxDisconnectedMs) {
+                        if (BuildConfig.DEBUG) Log.i("CruizerNav", "stopping: no Pod for $timeoutMinutes min")
                         stopSelf()
                         break
                     }
@@ -195,12 +197,17 @@ class PodService : Service() {
             }
             if (st == LinkState.DISCONNECTED) {
                 stopLiveLocation()
+                Session.resetLiveRide() // trip timer needs both the Pod and a live route
                 // Leaving the link (voluntary or watchdog) resets the Pod's screen side.
                 lastFrameSentAt = 0
                 sentSplash = false
                 lastTurn = Session.currentTurn.value
                 awaitPin(false)
             }
+        }.launchIn(scope)
+
+        Session.navActive.onEach { active ->
+            if (!active) Session.resetLiveRide() // nav ended: stop the trip timer
         }.launchIn(scope)
 
         Session.currentTurn.onEach { t ->
@@ -258,7 +265,7 @@ class PodService : Service() {
             PodProtocol.setTimeFrame(
                 hour24 = cal.get(java.util.Calendar.HOUR_OF_DAY),
                 minute = cal.get(java.util.Calendar.MINUTE),
-                is12hFormat = Session.settings.value.twelveHourClock,
+                is12hFormat = Session.settings.value.is12Hour,
             )
         )
     }
@@ -350,14 +357,14 @@ class PodService : Service() {
         lastManeuver = maneuver
         val bottom = when (s.bottomMode) {
             Session.BottomMode.ARRIVAL -> turn.arrivalSecondsFromNow
-                ?.let { PodProtocol.Bottom.Arrival(it, s.twelveHourClock) }
+                ?.let { PodProtocol.Bottom.Arrival(it, s.is12Hour) }
             Session.BottomMode.REMAINING -> turn.remainingSeconds
                 ?.let { PodProtocol.Bottom.Remaining(it) }
             Session.BottomMode.TOTAL -> turn.routeRemainingM
                 ?.let { PodProtocol.Bottom.Total(it, s.imperial) }
             Session.BottomMode.CYCLE -> {
                 val available = listOfNotNull(
-                    turn.arrivalSecondsFromNow?.let { PodProtocol.Bottom.Arrival(it, s.twelveHourClock) },
+                    turn.arrivalSecondsFromNow?.let { PodProtocol.Bottom.Arrival(it, s.is12Hour) },
                     turn.remainingSeconds?.let { PodProtocol.Bottom.Remaining(it) },
                     turn.routeRemainingM?.let { PodProtocol.Bottom.Total(it, s.imperial) },
                 )
@@ -514,6 +521,12 @@ class PodService : Service() {
 
     private fun startAsForeground(text: String) {
         channel()
+        val stopIntent = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, PodService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
         val n = NotificationCompat.Builder(this, CHANNEL_ID)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -525,6 +538,7 @@ class PodService : Service() {
                     PendingIntent.FLAG_IMMUTABLE,
                 )
             )
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent)
             .build()
         // A trip needs the location type, but only while the permission is held:
         // startForeground throws without it on Android 14+.

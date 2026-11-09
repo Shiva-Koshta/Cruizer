@@ -69,6 +69,9 @@ private val CYCLE_OPTIONS = listOf(
 @Composable
 fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
     val s by Session.settings.collectAsState()
+    var timeoutText by remember(s.disconnectTimeoutMinutes) {
+        mutableStateOf(s.disconnectTimeoutMinutes.toString())
+    }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
     val comapsPerms = remember(context) { site.casiopea.cruizer.notify.ComapsSource.permissions(context) }
@@ -165,8 +168,8 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                     )
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingSwitch("12-hour clock", s.twelveHourClock) { v ->
-                            Session.updateSettings { it.copy(twelveHourClock = v) }
+                        SettingSwitch("24-hour clock", s.twentyFourHourClock) { v ->
+                            Session.updateSettings { it.copy(twentyFourHourClock = v) }
                         }
                         SettingSwitch("Imperial units", s.imperial) { v ->
                             Session.updateSettings { it.copy(imperial = v) }
@@ -174,6 +177,24 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                         SettingSwitch("Liquid Glass & Specular Glare", s.liquidGlass) { v ->
                             Session.updateSettings { it.copy(liquidGlass = v) }
                         }
+                        OutlinedTextField(
+                            value = timeoutText,
+                            onValueChange = { raw ->
+                                val digits = raw.filter { it.isDigit() }.take(4)
+                                timeoutText = digits
+                                digits.toIntOrNull()?.let { n ->
+                                    Session.updateSettings { it.copy(disconnectTimeoutMinutes = n) }
+                                }
+                            },
+                            label = { Text("Disconnect timeout") },
+                            suffix = { Text("min") },
+                            supportingText = {
+                                Text("Keep searching for the Pod after disconnect. 0 stops immediately.")
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
             }

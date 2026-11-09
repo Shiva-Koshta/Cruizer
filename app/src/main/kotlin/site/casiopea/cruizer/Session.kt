@@ -38,6 +38,7 @@ object Session {
     private const val KEY_LIQUID_GLASS = "liquid_glass_mode"
     private const val KEY_ACTIVE_BIKE_MAC = "active_bike_mac"
     private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
+    private const val KEY_DISCONNECT_TIMEOUT = "disconnect_timeout"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -66,10 +67,11 @@ object Session {
                             .getOrElse(p[intPreferencesKey(KEY_BOTTOM)] ?: 2) { BottomMode.ARRIVAL },
                         themeMode = themeChoice,
                         cycleIntervalSeconds = p[intPreferencesKey(KEY_CYCLE_INTERVAL)] ?: 5,
-                        twelveHourClock = p[booleanPreferencesKey("clock_12h")] ?: false,
+                        twentyFourHourClock = p[booleanPreferencesKey("clock_24h")] ?: false,
                         // Indian standard units (metric: km, km/h, km/L, Liters) by default unless toggled
                         imperial = p[booleanPreferencesKey("imperial")] ?: false,
                         liquidGlass = glassChoice,
+                        disconnectTimeoutMinutes = p[intPreferencesKey(KEY_DISCONNECT_TIMEOUT)] ?: 60,
                     )
                     var pods = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
                     val rememberedMac = context.getSharedPreferences("pod", Context.MODE_PRIVATE)
@@ -132,11 +134,14 @@ object Session {
         val bottomMode: BottomMode = BottomMode.ARRIVAL,
         val themeMode: ThemeMode = ThemeMode.SYSTEM,
         val cycleIntervalSeconds: Int = 5,
-        val twelveHourClock: Boolean = false,
+        val twentyFourHourClock: Boolean = false,
         /** Indian standard units (km, km/h, km/L, Liters) by default; imperial feet/miles when true */
         val imperial: Boolean = false,
         val liquidGlass: Boolean = true,
-    )
+        val disconnectTimeoutMinutes: Int = 60,
+    ) {
+        val is12Hour: Boolean get() = !twentyFourHourClock
+    }
 
     private val _settings = MutableStateFlow(Settings())
     val settings: StateFlow<Settings> = _settings
@@ -167,15 +172,14 @@ object Session {
         lastLat = location.latitude
         lastLon = location.longitude
         val isConnected = linkState.value == LinkState.CONNECTED
-        val speedKmh = Math.round(location.speed * 3.6f).coerceAtLeast(0)
-        val current = _liveRide.value
-        val isMoving = speedKmh > 1
-
-        // Only start or tick the timer when connected, navigating, or actually moving
-        if (!isConnected && !isMoving && !navActive.value) {
-            lastLiveLoc = location
+        // Trip timer runs only with the Pod connected and a nav app navigating.
+        if (!isConnected || !navActive.value) {
+            if (_liveRide.value.isActive) resetLiveRide()
+            lastLiveLoc = null
             return
         }
+        val speedKmh = Math.round(location.speed * 3.6f).coerceAtLeast(0)
+        val current = _liveRide.value
 
         val started = current.startedAt ?: System.currentTimeMillis()
         val elapsed = ((System.currentTimeMillis() - started) / 1000).coerceAtLeast(0)
@@ -216,9 +220,10 @@ object Session {
                 it[intPreferencesKey(KEY_BOTTOM)] = next.bottomMode.ordinal
                 it[intPreferencesKey(KEY_THEME)] = next.themeMode.ordinal
                 it[intPreferencesKey(KEY_CYCLE_INTERVAL)] = next.cycleIntervalSeconds
-                it[booleanPreferencesKey("clock_12h")] = next.twelveHourClock
+                it[booleanPreferencesKey("clock_24h")] = next.twentyFourHourClock
                 it[booleanPreferencesKey("imperial")] = next.imperial
                 it[booleanPreferencesKey("liquid_glass")] = next.liquidGlass
+                it[intPreferencesKey(KEY_DISCONNECT_TIMEOUT)] = next.disconnectTimeoutMinutes
             }
         }
     }
