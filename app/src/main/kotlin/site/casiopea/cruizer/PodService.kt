@@ -224,9 +224,13 @@ class PodService : Service() {
             }
         }.launchIn(scope)
 
-        Session.settings.onEach {
+        var lastNight: Session.NightMode? = null
+        Session.settings.onEach { s ->
+            val nightChanged = lastNight != null && lastNight != s.nightMode
+            lastNight = s.nightMode
             if (link.state.value == LinkState.CONNECTED) {
                 sendSetTime()
+                if (nightChanged) resendScreen()
             }
         }.launchIn(scope)
     }
@@ -390,6 +394,19 @@ class PodService : Service() {
     }
 
     // ------------------------------------------------------------- night ---
+
+    /** Re-send the screen the Pod is on: the day/night bit only lives in nav frames. */
+    private fun resendScreen() {
+        val now = System.currentTimeMillis()
+        val turn = Session.currentTurn.value
+        when {
+            turn != null && !turn.ended -> renderNavFrame(turn, currentNight(), now)
+            Session.navActive.value -> {
+                link.send(PodProtocol.routeStartedFrame(currentNight()))
+                lastFrameSentAt = now
+            }
+        }
+    }
 
     private fun currentNight(): Boolean = when (Session.settings.value.nightMode) {
         Session.NightMode.DAY -> false
