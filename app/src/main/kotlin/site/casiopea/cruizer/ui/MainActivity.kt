@@ -196,9 +196,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Predictive back: active on Playground or on Settings (settledPage != 0)
-        // When on Bike (settledPage == 0 and not in playground), disabled -> system back exits to launcher
-        val isBackEnabled = inPlayground || pagerState.settledPage != 0
+        // Predictive back: active on Playground or on Settings (settledPage != 0).
+        // backGestureActive keeps it enabled while the pager itself is being driven,
+        // because requestScrollToPage flips settledPage to 0 mid-gesture.
+        val isBackEnabled = inPlayground || backGestureActive || pagerState.settledPage != 0
         PredictiveBackHandler(enabled = isBackEnabled) { progress: Flow<BackEventCompat> ->
             val fromPlayground = inPlayground
             backGestureActive = true
@@ -206,8 +207,14 @@ class MainActivity : ComponentActivity() {
                 progress.collect { backEvent ->
                     backProgress = backEvent.progress
                     // Drive the pager itself so the Bike screen is revealed underneath.
+                    // pageOffsetFraction must stay within -0.5..0.5.
                     if (!fromPlayground) {
-                        pagerState.requestScrollToPage(0, 1f - backEvent.progress)
+                        val position = (1f - backEvent.progress).coerceIn(0f, 1f)
+                        if (position >= 0.5f) {
+                            pagerState.requestScrollToPage(1, position - 1f)
+                        } else {
+                            pagerState.requestScrollToPage(0, position)
+                        }
                     }
                 }
                 if (fromPlayground) {
