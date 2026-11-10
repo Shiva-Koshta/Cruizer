@@ -84,6 +84,9 @@ class PodService : Service() {
         restorePairedAddress()
         // GPS listening is live while connected
         refreshLocation()
+        // Live GPS for the whole service lifetime: trip recording continues even
+        // while the Pod is out of range, and start/stopLG is not tied to BLE.
+        startLiveLocation()
         registerPhoneState()
         ComapsSource.start(this) // structured turn data from CoMaps, if installed+granted
         site.casiopea.cruizer.notify.TurnSource.rebind(this) // ask OS to bind the listener if enabled
@@ -185,7 +188,6 @@ class PodService : Service() {
             if (BuildConfig.DEBUG) Log.i("CruizerNav", "link state → $st")
             updateForeground(st)
             if (st == LinkState.CONNECTED) {
-                startLiveLocation()
                 link.deviceAddress.value?.let { mac ->
                     if (Session.savedPods.value.none { p -> p.mac == mac }) {
                         Session.savePod(mac, "My Bike")
@@ -195,9 +197,8 @@ class PodService : Service() {
                 handshake()
             }
             if (st == LinkState.DISCONNECTED) {
-                stopLiveLocation()
-                Session.resetLiveRide() // trip timer needs both the Pod and a live route
                 // Leaving the link (voluntary or watchdog) resets the Pod's screen side.
+                // The recorded trip survives: BLE drops mid-ride must not erase the ride.
                 lastFrameSentAt = 0
                 sentSplash = false
                 lastTurn = Session.currentTurn.value

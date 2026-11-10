@@ -171,9 +171,9 @@ object Session {
     fun updateLiveLocation(location: Location) {
         lastLat = location.latitude
         lastLon = location.longitude
-        val isConnected = linkState.value == LinkState.CONNECTED
-        // Trip timer runs only with the Pod connected and a nav app navigating.
-        if (!isConnected || !navActive.value) {
+        // Trip timer runs while a route is live — with or without the Pod.
+        // A BLE drop mid-ride pauses nothing: the Pod merely loses its screen feed.
+        if (!navActive.value) {
             if (_liveRide.value.isActive) resetLiveRide()
             lastLiveLoc = null
             return
