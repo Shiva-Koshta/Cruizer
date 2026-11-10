@@ -138,12 +138,14 @@ object ComapsSource {
                     when {
                         update != null -> {
                             Session.navActive.value = true
+                            Session.lastNavSource.value = pkg
                             Session.postTurn(update)
                             owned = true
                         }
                         owned -> {
                             // empty cursor = navigation ended; clear only our own turn
                             Session.navActive.value = false
+                            Session.lastNavSource.value = null
                             Session.postTurn(null)
                             owned = false
                         }

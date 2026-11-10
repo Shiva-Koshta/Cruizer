@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Cruizer</string>
+    <string name="a11y_service_desc" translatable="false">Reads Google Maps\' live navigation screen so your Tripper Pod gets turn distance, ETA and route data in real time. Only Maps is read; nothing leaves your device.</string>
 </resources>

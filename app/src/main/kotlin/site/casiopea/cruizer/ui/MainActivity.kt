@@ -15,6 +15,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.runtime.saveable.rememberSaveable
+import site.casiopea.cruizer.notify.MapsScreenSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -414,7 +416,50 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Connection card, live trip dashboard, and multi-pod management on the Home tab. */
+/**
+ * Home banner: Google Maps is the current nav app (it last posted turn data)
+ * but the screen-read service isn't connected. Hides live when the toggle
+ * flips; the × hides it until the app next launches.
+ */
+@Composable
+private fun MapsBanner() {
+    val context = LocalContext.current
+    val lastSource by Session.lastNavSource.collectAsState()
+    val connected by Session.mapsA11yConnected.collectAsState()
+    val dismissed = rememberSaveable { mutableStateOf(false) }
+    val mapsInstalled = remember {
+        runCatching { context.packageManager.getPackageInfo("com.google.android.apps.maps", 0) }.isSuccess
+    }
+    if (dismissed.value || connected || lastSource != "com.google.android.apps.maps" || !mapsInstalled) return
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "🖥️ Google Maps is navigating — turn on live screen data for distance & ETA.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { MapsScreenSource.start(context) }) { Text("Enable") }
+            Text(
+                "✕",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier
+                    .clickable { dismissed.value = true }
+                    .padding(4.dp),
+            )
+        }
+    }
+}
+
+/** Connect flow, live trip dashboard, and multi-pod management on the Home tab. */
 @Composable
 private fun PodScreen(modifier: Modifier = Modifier) {
     val state by Session.linkState.collectAsState()
@@ -554,6 +599,12 @@ private fun PodScreen(modifier: Modifier = Modifier) {
                     }
                 }
             }
+        }
+
+        // Maps live-screen banner: Maps is the current nav app and the
+        // accessibility source isn't connected. Dismissible per app session.
+        item {
+            MapsBanner()
         }
 
         // Live Trip & Navigation Dashboard Card

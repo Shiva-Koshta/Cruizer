@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import site.casiopea.cruizer.notify.MapsScreenSource
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -72,6 +73,11 @@ fun OnboardingScreen(
     // Location stays optional: BLE is neverForLocation and turn data comes from
     // notifications/provider. Location only enriches the trip + AUTO night mode.
     val allRequiredGranted = btPerms && listener
+    val mapsInstalled = runCatching {
+        context.packageManager.getPackageInfo("com.google.android.apps.maps", 0)
+    }.isSuccess
+
+    val mapsA11yReady = MapsScreenSource.enabled(context)
 
     Column(
         modifier = modifier
@@ -166,6 +172,20 @@ fun OnboardingScreen(
                 actionLabel = "Grant",
             ) {
                 permLauncher.launch(comapsPerms.toTypedArray())
+            }
+        }
+
+        // 6. Maps screen-read (accessibility) - Optional; richer Google Maps turn data.
+        if (mapsInstalled) {
+            PermissionCard(
+                emoji = "🖥️",
+                title = "Google Maps live screen data",
+                description = "Optional — read Maps' navigation screen for live turn distance and route time. Notifications still work without it.",
+                ready = mapsA11yReady,
+                required = false,
+                actionLabel = "Open Settings",
+            ) {
+                MapsScreenSource.start(context)
             }
         }
 

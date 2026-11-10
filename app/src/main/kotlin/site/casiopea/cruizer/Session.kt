@@ -330,6 +330,12 @@ object Session {
     /** A nav app has an ongoing navigation notification (even before any turn text). */
     val navActive = MutableStateFlow(false)
 
+    /** Package of the nav app that produced the latest turn/nav activity (home-screen banner logic). */
+    val lastNavSource = MutableStateFlow<String?>(null)
+
+    /** Google Maps screen-read (accessibility) service currently connected: banner hides when true. */
+    val mapsA11yConnected = MutableStateFlow(false)
+
     /** Exactly what the Pod is showing right now (null = clock/PING). Set by the service. */
     val podScreen = MutableStateFlow<site.casiopea.cruizer.proto.PodProtocol.PodScreen?>(null)
 

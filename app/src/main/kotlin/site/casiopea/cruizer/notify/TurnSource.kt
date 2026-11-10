@@ -53,6 +53,7 @@ class TurnSource : NotificationListenerService() {
     override fun onListenerDisconnected() {
         pendingClear?.let { handler.removeCallbacks(it); pendingClear = null }
         Session.navActive.value = false
+        Session.lastNavSource.value = null
         Session.postTurn(null)
     }
 
@@ -78,6 +79,7 @@ class TurnSource : NotificationListenerService() {
                 val stillActive = activeNotifications.any(::isNavSource)
                 if (!stillActive) {
                     Session.navActive.value = false
+                    Session.lastNavSource.value = null
                     Session.postTurn(null)
                 }
             }
@@ -88,6 +90,7 @@ class TurnSource : NotificationListenerService() {
 
     private fun tryParse(sbn: StatusBarNotification) {
         if (!isNavSource(sbn)) return
+        Session.lastNavSource.value = sbn.packageName
         if (site.casiopea.cruizer.BuildConfig.DEBUG && PROBE_PACKAGES.any(sbn.packageName::startsWith)) {
             dumpExtras(sbn)
         }
