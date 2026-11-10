@@ -265,6 +265,11 @@ object Session {
         }
     }
 
+    /** Re-show the permission/onboarding screen; persisting "done" stays untouched. */
+    fun showOnboarding() {
+        onboardingCompleted.value = false
+    }
+
     fun selectBike(mac: String) {
         if (mac.isBlank()) return
         activeBikeMac.value = mac

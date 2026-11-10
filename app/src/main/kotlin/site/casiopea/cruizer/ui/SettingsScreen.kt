@@ -221,6 +221,13 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
             }
         }
 
+        // Re-run permission setup: flips the in-memory onboarding flag only.
+        item {
+            OutlinedButton(onClick = Session::showOnboarding) {
+                Text("Permissions & setup")
+            }
+        }
+
         if (site.casiopea.cruizer.BuildConfig.DEBUG) {
             item {
                 OutlinedButton(onClick = onPlayground) { Text("Frame playground") }
