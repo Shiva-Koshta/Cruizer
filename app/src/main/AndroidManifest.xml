@@ -32,6 +32,7 @@
         <provider android:authorities="app.comaps.provider.navigation" />
         <provider android:authorities="app.comaps.fdroid.provider.navigation" />
         <provider android:authorities="app.comaps.google.provider.navigation" />
+        <provider android:authorities="app.organicmaps.provider.navigation" />
     </queries>
 
     <application

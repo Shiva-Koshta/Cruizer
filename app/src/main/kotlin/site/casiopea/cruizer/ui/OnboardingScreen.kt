@@ -158,7 +158,7 @@ fun OnboardingScreen(
             PermissionCard(
                 emoji = "🗺️",
                 title = "CoMaps navigation data",
-                description = "Direct structured data provider access for CoMaps (an Organic Maps fork).",
+                description = "Direct structured data provider access for CoMaps / Organic Maps.",
                 ready = false,
                 required = false,
                 actionLabel = "Grant",

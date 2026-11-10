@@ -49,6 +49,14 @@ class ComapsSourceTest {
     }
 
     @Test
+    fun StartAtEndOfStreetIsContinueNotDepart() {
+        // The first leg used to pin the Pod onto the depart splash for minutes.
+        val u = ComapsSource.turnUpdate("START_AT_END_OF_STREET", null, "800 m", "12 km", 900, 0)!!
+        assertEquals(TurnKind.STRAIGHT, u.kind)
+        assertEquals(800, u.distanceM)
+    }
+
+    @Test
     fun unknownDirectionIsNull() {
         assertNull(ComapsSource.turnUpdate("SOMETHING_NEW", null, "100 m", null, null, 0))
     }

@@ -91,13 +91,15 @@ class TurnSource : NotificationListenerService() {
         if (site.casiopea.cruizer.BuildConfig.DEBUG && PROBE_PACKAGES.any(sbn.packageName::startsWith)) {
             dumpExtras(sbn)
         }
-        // CoMaps publishes structured turn data via ContentProvider (ComapsSource);
-        // ignore its notification so coarse text parsing cannot clobber it.
-        if (sbn.packageName.startsWith("app.comaps") &&
-            ComapsSource.installed(this).any { ComapsSource.granted(this, it) }
-        ) {
-            Session.navActive.value = true
-            return
+        // CoMaps/OM publish structured turn data via ContentProvider (ComapsSource)
+        // when installed with the granted permission: ignore their notifications
+        // so coarse text parsing cannot clobber the provider data. Capability
+        // check (provider+permission), not a package-name whitelist.
+        if (sbn.packageName.startsWith("app.comaps") || sbn.packageName == "app.organicmaps") {
+            if (ComapsSource.installed(this).any { ComapsSource.granted(this, it) }) {
+                Session.navActive.value = true
+                return
+            }
         }
         // Any ongoing nav notification means a route is live, even if its text
         // is still idle ("Guiding to…", "Starting navigation…").

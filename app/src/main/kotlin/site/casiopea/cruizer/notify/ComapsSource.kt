@@ -25,7 +25,12 @@ import kotlinx.coroutines.launch
  */
 object ComapsSource {
 
-    private val PACKAGES = listOf("app.comaps", "app.comaps.fdroid", "app.comaps.google")
+    private val PACKAGES = listOf(
+        "app.comaps",
+        "app.comaps.fdroid",
+        "app.comaps.google",
+        "app.organicmaps", // upstream may grow the same provider; detection is capability-based
+    )
     private const val AUTHORITY_SUFFIX = ".provider.navigation"
     private const val PERMISSION_SUFFIX = ".permission.READ_NAVIGATION_DATA"
 
@@ -216,7 +221,11 @@ object ComapsSource {
         "ENTER_ROUND_ABOUT" to TurnKind.ROUNDABOUT,
         "LEAVE_ROUND_ABOUT" to TurnKind.ROUNDABOUT,
         "STAY_ON_ROUND_ABOUT" to TurnKind.STRAIGHT,
-        "START_AT_END_OF_STREET" to TurnKind.DEPART,
+        // START_AT_END_OF_STREET is CoMaps' depart leg — the first street here is still
+        // "continue on <street>". Sending the DEPART splash icon instead of the plain
+        // turn frame froze the Pod on the depart screen for the whole first leg.
+        // map it onto GO_STRAIGHT intentionally.
+        "START_AT_END_OF_STREET" to TurnKind.STRAIGHT,
         "REACHED_YOUR_DESTINATION" to TurnKind.DESTINATION,
         "EXIT_HIGHWAY_TO_LEFT" to TurnKind.OFF_RAMP_LEFT,
         "EXIT_HIGHWAY_TO_RIGHT" to TurnKind.OFF_RAMP_RIGHT,
