@@ -208,7 +208,12 @@ class PodService : Service() {
         }.launchIn(scope)
 
         Session.navActive.onEach { active ->
-            if (!active) Session.resetLiveRide() // nav ended: stop the trip timer
+            if (active) {
+                // Route live => the ride clock starts, GPS or not (hybrid timer).
+                Session.ensureRideStarted()
+            } else {
+                Session.resetLiveRide() // nav ended: stop the trip timer
+            }
         }.launchIn(scope)
 
         Session.currentTurn.onEach { t ->
@@ -420,9 +425,17 @@ class PodService : Service() {
         Session.NightMode.AUTO -> {
             val lat = Session.lastLat
             val lon = Session.lastLon
-            if (lat == null || lon == null) false else SunPhase.isNight(lat, lon, System.currentTimeMillis())
+            when {
+                lat != null && lon != null ->
+                    SunPhase.isNight(lat, lon, System.currentTimeMillis())
+                else -> systemDark() // no GPS: follow the system dark-mode setting
+            }
         }
     }
+
+    private fun systemDark(): Boolean =
+        (getResources().configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
 
     private val liveLocationListener = object : LocationListener {
         override fun onLocationChanged(loc: Location) {

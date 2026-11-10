@@ -69,7 +69,9 @@ fun OnboardingScreen(
     }
 
     val comapsPerms = site.casiopea.cruizer.notify.ComapsSource.permissions(context)
-    val allRequiredGranted = btPerms && location && listener
+    // Location stays optional: BLE is neverForLocation and turn data comes from
+    // notifications/provider. Location only enriches the trip + AUTO night mode.
+    val allRequiredGranted = btPerms && listener
 
     Column(
         modifier = modifier
@@ -112,13 +114,13 @@ fun OnboardingScreen(
             )
         }
 
-        // 2. Location - Required
+        // 2. Location - Optional
         PermissionCard(
             emoji = "📍",
             title = "Location",
-            description = "Required for GPS ride tracking, speed calculation, and sunrise/sunset dial mode.",
+            description = "Optional — GPS trip tracking (distance, speed) and automatic day/night mode. Turn-by-turn works without it.",
             ready = location,
-            required = true,
+            required = false,
             actionLabel = "Grant Permission",
         ) {
             permLauncher.launch(

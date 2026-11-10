@@ -127,6 +127,13 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                                 )
                             }
                         }
+                        if (s.nightMode == Session.NightMode.AUTO) {
+                            Text(
+                                "Auto uses GPS position; without location it follows the system dark mode.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
 
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

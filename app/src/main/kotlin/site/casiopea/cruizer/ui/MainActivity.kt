@@ -168,7 +168,6 @@ class MainActivity : ComponentActivity() {
     private fun isReady(): Boolean =
         has(Manifest.permission.BLUETOOTH_CONNECT) &&
             has(Manifest.permission.BLUETOOTH_SCAN) &&
-            has(Manifest.permission.ACCESS_FINE_LOCATION) &&
             listenerGranted(this)
 
     private fun has(p: String): Boolean =

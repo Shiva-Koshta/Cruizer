@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import android.Manifest
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -88,6 +89,7 @@ import kotlin.math.sin
  */
 @Composable
 fun LiveTripCard(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val liveRide by Session.liveRide.collectAsState()
     val turn by Session.currentTurn.collectAsState()
     val podScreen by Session.podScreen.collectAsState()
@@ -139,6 +141,8 @@ fun LiveTripCard(modifier: Modifier = Modifier) {
                 ride = liveRide,
                 settings = settings,
                 bike = bike,
+                hasGps = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED,
             )
         }
     }
@@ -362,19 +366,32 @@ private fun LiveRideMetricsSection(
     ride: Session.LiveRide,
     settings: Session.Settings,
     bike: Session.SavedPod?,
+    hasGps: Boolean,
 ) {
-    val elapsedSec = ride.elapsedSeconds
-    val distStr = if (!settings.imperial) {
+    // 1 s tick so the duration advances during a ride even with GPS off
+    // (elapsed is derived from startedAt, not from GPS callbacks).
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(ride.isActive, ride.startedAt) {
+        if (ride.isActive && ride.startedAt != null) {
+            while (true) {
+                nowMs = System.currentTimeMillis()
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+    }
+    val elapsedSec = ride.startedAt?.let { nowMs - it }?.div(1000)?.coerceAtLeast(0) ?: 0L
+    val noFix = !hasGps
+    val distStr = if (noFix) "—" else if (!settings.imperial) {
         "%.1f km".format(Locale.US, ride.distanceM / 1000f)
     } else {
         "%.1f mi".format(Locale.US, ride.distanceM * 0.000621371f)
     }
-    val speedStr = if (!settings.imperial) {
+    val speedStr = if (noFix) "—" else if (!settings.imperial) {
         "${ride.currentSpeedKmh} km/h"
     } else {
         "${(ride.currentSpeedKmh * 0.621371).toInt()} mph"
     }
-    val avgSpeedStr = if (!settings.imperial) {
+    val avgSpeedStr = if (noFix || ride.avgSpeedKmh <= 0) "—" else if (!settings.imperial) {
         "${ride.avgSpeedKmh} km/h"
     } else {
         "${(ride.avgSpeedKmh * 0.621371).toInt()} mph"
@@ -382,12 +399,12 @@ private fun LiveRideMetricsSection(
 
     val kmpl = bike?.effectiveKmpl ?: 36.5
     val liters = (ride.distanceM / 1000.0) / kmpl.coerceAtLeast(1.0)
-    val fuelStr = if (!settings.imperial) {
+    val fuelStr = if (noFix) "—" else if (!settings.imperial) {
         "%.2f L".format(Locale.US, liters)
     } else {
         "%.2f gal".format(Locale.US, liters * 0.264172)
     }
-    val economyStr = if (!settings.imperial) {
+    val economyStr = if (noFix) "—" else if (!settings.imperial) {
         "%.1f km/L".format(Locale.US, kmpl)
     } else {
         "%.1f mpg".format(Locale.US, kmpl * 2.35215)

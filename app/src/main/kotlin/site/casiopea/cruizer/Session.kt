@@ -179,8 +179,7 @@ object Session {
             return
         }
         val speedKmh = Math.round(location.speed * 3.6f).coerceAtLeast(0)
-        val current = _liveRide.value
-
+        val current = ensureRideStarted()
         val started = current.startedAt ?: System.currentTimeMillis()
         val elapsed = ((System.currentTimeMillis() - started) / 1000).coerceAtLeast(0)
         val prev = lastLiveLoc
@@ -207,6 +206,18 @@ object Session {
     fun resetLiveRide() {
         lastLiveLoc = null
         _liveRide.value = LiveRide()
+    }
+
+    /**
+     * Timer runs on the route, not on GPS: without location permission the ride
+     * still starts when the route goes live — GPS enriches it when granted.
+     */
+    fun ensureRideStarted(): LiveRide {
+        val current = _liveRide.value
+        if (current.isActive && current.startedAt != null) return current
+        val next = current.copy(isActive = true, startedAt = current.startedAt ?: System.currentTimeMillis())
+        _liveRide.value = next
+        return next
     }
 
     fun updateSettings(f: (Settings) -> Settings) {
