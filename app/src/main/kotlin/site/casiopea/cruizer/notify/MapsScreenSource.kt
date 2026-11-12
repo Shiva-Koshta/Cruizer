@@ -10,6 +10,8 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import site.casiopea.cruizer.Session
+import site.casiopea.cruizer.proto.TurnKind
+import site.casiopea.cruizer.proto.TurnUpdate
 
 /**
  * Android boundary only: when the user enables Cruizer in Settings →
@@ -79,18 +81,23 @@ class MapsScreenSource : AccessibilityService() {
 
     private fun snapshot() {
         val root = rootInActiveWindow?.takeIf { it.packageName == MAPS_PACKAGE } ?: return
-        val lines = ArrayList<String>()
-        walk(root, lines)
+        val screenH = resources.displayMetrics.heightPixels.toFloat().coerceAtLeast(1f)
+        val lines = ArrayList<MapsScreenTextParser.ScreenLine>()
+        walk(root, screenH, lines)
         if (lines.isEmpty()) return
         // Debug-only capture, same convention as notifications: logcat + Settings card.
-        Session.captureNotif("maps-a11y: ${lines.joinToString(" | ")}")
+        // y is included so the top/bottom split can be calibrated from real rides.
+        Session.captureNotif(
+            "maps-a11y: " + lines.joinToString(" | ") { "%.2f:${it.text}".format(it.y) },
+        )
         val parsed = MapsScreenTextParser.extract(lines) ?: return
         Session.lastNavSource.value = MAPS_PACKAGE
         when (parsed) {
             is NavTextParser.Parsed.Turn -> {
-                if (parsed.update.ended) Session.navActive.value = false // arrived
+                val update = merge(parsed.update)
+                if (update.ended) Session.navActive.value = false // arrived
                 else if (!Session.navActive.value) Session.navActive.value = true
-                Session.postTurn(parsed.update)
+                Session.postTurn(update)
             }
             // No actionable text yet (route just started): the screen IS a live
             // route, so nav liveness comes from the nav-mode gate alone.
@@ -98,9 +105,33 @@ class MapsScreenSource : AccessibilityService() {
         }
     }
 
-    private fun walk(node: AccessibilityNodeInfo, out: MutableList<String>) {
-        node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let(out::add)
-        node.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let(out::add)
-        for (i in 0 until node.childCount) node.getChild(i)?.let { walk(it, out) }
+    /**
+     * The bottom bar ticks ~1 Hz but the instruction card only changes at a turn.
+     * When the card carried no maneuver, keep the previous kind/arrow and refresh
+     * just the route summary, so the Pod's bottom line keeps updating.
+     */
+    private fun merge(next: TurnUpdate): TurnUpdate {
+        val prev = Session.currentTurn.value ?: return next
+        if (next.kind != TurnKind.UNKNOWN) return next
+        return prev.copy(
+            remainingSeconds = next.remainingSeconds ?: prev.remainingSeconds,
+            routeRemainingM = next.routeRemainingM ?: prev.routeRemainingM,
+            arrivalSecondsFromNow = next.arrivalSecondsFromNow ?: prev.arrivalSecondsFromNow,
+        )
+    }
+
+    private fun walk(
+        node: AccessibilityNodeInfo,
+        screenH: Float,
+        out: MutableList<MapsScreenTextParser.ScreenLine>,
+    ) {
+        val rect = android.graphics.Rect()
+        node.getBoundsInScreen(rect)
+        val y = (rect.top / screenH).coerceIn(0f, 1f)
+        node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { out.add(MapsScreenTextParser.ScreenLine(it, y)) }
+        node.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { out.add(MapsScreenTextParser.ScreenLine(it, y)) }
+        for (i in 0 until node.childCount) node.getChild(i)?.let { walk(it, screenH, out) }
     }
 }
