@@ -11,8 +11,14 @@ android {
         applicationId = "site.casiopea.cruizer"
         minSdk = 31
         targetSdk = 37
-        versionCode = 41
-        versionName = "0.5.12"
+        versionCode = 42
+        versionName = "0.5.13"
+    }
+
+    testOptions {
+        // Session is a plain object but logs via android.util.Log; without this a
+        // JVM test of the route lifecycle dies on the unmocked stub.
+        unitTests.isReturnDefaultValues = true
     }
 
     buildTypes {

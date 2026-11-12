@@ -139,7 +139,7 @@ class MainActivity : ComponentActivity() {
                 @Suppress("UNUSED_EXPRESSION")
                 g // re-check on gate update
                 val onboarded by Session.onboardingCompleted.collectAsState()
-                val ready = isReady()
+                val ready = hasRequiredPermissions()
                 if (!onboarded || !ready) {
                     OnboardingScreen(
                         onFinish = { Session.completeOnboarding() },
@@ -162,11 +162,6 @@ class MainActivity : ComponentActivity() {
         site.casiopea.cruizer.notify.TurnSource.rebind(this)
         site.casiopea.cruizer.notify.ComapsSource.start(this)
     }
-
-    private fun isReady(): Boolean =
-        has(Manifest.permission.BLUETOOTH_CONNECT) &&
-            has(Manifest.permission.BLUETOOTH_SCAN) &&
-            listenerGranted(this)
 
     private fun has(p: String): Boolean =
         checkSelfPermission(p) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -669,10 +664,12 @@ private fun PinDialog() {
 }
 
 // Location stays out: it is optional everywhere else, so gating Connect on it
-// made the button silently dead for riders who denied it.
-private fun Context.hasRequiredPermissions(): Boolean =
+// made the button silently dead for riders who denied it. Notifications stay in:
+// without them the foreground-service notification is invisible on Android 13+.
+internal fun Context.hasRequiredPermissions(): Boolean =
     has(Manifest.permission.BLUETOOTH_CONNECT) &&
         has(Manifest.permission.BLUETOOTH_SCAN) &&
+        has(Manifest.permission.POST_NOTIFICATIONS) &&
         listenerGranted(this)
 
 internal fun Context.podStart(mac: String? = null) {

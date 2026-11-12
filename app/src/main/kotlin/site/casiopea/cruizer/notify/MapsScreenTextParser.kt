@@ -41,7 +41,7 @@ object MapsScreenTextParser {
      * Returns the turn when the window is a live route, or null when it isn't
      * (no nav controls found — never parse a merely-open Maps app).
      */
-    fun extract(lines: List<ScreenLine>, now: Calendar = Calendar.getInstance()): NavTextParser.Parsed? {
+    fun extract(lines: List<ScreenLine>, now: Calendar = Calendar.getInstance()): TurnUpdate? {
         val clean = lines
             .map { ScreenLine(it.text.trim(), it.y) }
             .filter { it.text.isNotEmpty() }
@@ -54,12 +54,10 @@ object MapsScreenTextParser {
 
         val parsed = NavTextParser.parse(instruction, now)
         val turn = (parsed as? NavTextParser.Parsed.Turn)?.update ?: TurnUpdate(TurnKind.UNKNOWN, null)
-        return NavTextParser.Parsed.Turn(
-            turn.copy(
-                remainingSeconds = minutesSeconds(summary) ?: turn.remainingSeconds,
-                routeRemainingM = summaryMeters(summary) ?: turn.routeRemainingM,
-                arrivalSecondsFromNow = summaryEta(summary, now) ?: turn.arrivalSecondsFromNow,
-            ),
+        return turn.copy(
+            remainingSeconds = minutesSeconds(summary) ?: turn.remainingSeconds,
+            routeRemainingM = summaryMeters(summary) ?: turn.routeRemainingM,
+            arrivalSecondsFromNow = summaryEta(summary, now) ?: turn.arrivalSecondsFromNow,
         )
     }
 

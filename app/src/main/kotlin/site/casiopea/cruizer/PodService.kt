@@ -65,6 +65,7 @@ class PodService : Service() {
     private var lastFrameSentAt = 0L
     private var lastManeuver: Int? = null
     private var sentSplash = false
+    private var liveLocationOn = false
 
     /** No binding: the UI talks to the service through [Session] only. */
     override fun onBind(intent: Intent?): IBinder? = null
@@ -82,11 +83,8 @@ class PodService : Service() {
         observe()
         restorePairedAddress()
         // Seed the last known position so AUTO night mode is right before the
-        // first live fix arrives; the live listener below takes over.
+        // first live fix arrives; the live listener starts with the route.
         refreshLocation()
-        // Live GPS for the whole service lifetime: trip recording continues even
-        // while the Pod is out of range, and start/stopLG is not tied to BLE.
-        startLiveLocation()
         registerPhoneState()
         ComapsSource.start(this) // structured turn data from CoMaps, if installed+granted
         site.casiopea.cruizer.notify.TurnSource.rebind(this) // ask OS to bind the listener if enabled
@@ -100,13 +98,20 @@ class PodService : Service() {
             var disconnectedMs = 0L
             var everConnected = false
             while (isActive) {
+                // GPS only while a route is live: it feeds the trip and AUTO night
+                // mode, and an hour of 1 Hz fixes for a Pod that never connected is
+                // pure battery. Re-checking every tick also picks up a permission
+                // granted after the service started.
+                if (Session.navActive.value) startLiveLocation() else stopLiveLocation()
                 if (link.state.value != LinkState.CONNECTED) {
                     val timeoutMinutes = Session.settings.value.disconnectTimeoutMinutes
                     disconnectedMs += CONNECT_PAUSE_MS
-                    // 0 = stop on the first tick after a real disconnect, but still
-                    // allow the initial Connect attempt to scan.
-                    val maxDisconnectedMs = timeoutMinutes * 60 * 1000L
-                    if (disconnectedMs > maxDisconnectedMs && (timeoutMinutes > 0 || everConnected)) {
+                    // 0 = stop on the first tick after a real disconnect. Before the
+                    // first connect keep a minute, so the Connect button can still
+                    // find a Pod that has not started advertising yet.
+                    val graceMs = if (everConnected) timeoutMinutes * 60_000L
+                    else maxOf(timeoutMinutes * 60_000L, 60_000L)
+                    if (disconnectedMs > graceMs) {
                         if (BuildConfig.DEBUG) Log.i("CruizerNav", "stopping: no Pod for $timeoutMinutes min")
                         stopSelf()
                         break
@@ -220,7 +225,9 @@ class PodService : Service() {
         var prevTurn: TurnUpdate? = null
         Session.currentTurn.onEach { t ->
             if (t == null) lastManeuver = null
-            if (prevTurn == null && t != null) sentSplash = false
+            // An ended turn re-posted by its source is still the same ride: only a
+            // fresh turn re-arms the splash, or the Pod alternates splash/arrival.
+            if (prevTurn == null && t != null && !t.ended) sentSplash = false
             prevTurn = t
             if (t != null && link.state.value == LinkState.DISCONNECTED) link.scanOrConnect(bleReady())
             // Fire the route splash the instant nav data lands instead of waiting
@@ -378,6 +385,10 @@ class PodService : Service() {
         lastFrameSentAt = System.currentTimeMillis()
     }
 
+    /** ETA: the parsed clock when a source has one, else time-left as a clock. */
+    private fun eta(turn: TurnUpdate): Int? =
+        turn.arrivalSecondsFromNow ?: turn.remainingSeconds
+
     private fun renderNavFrame(turn: TurnUpdate, night: Boolean, now: Long) {
         val s = Session.settings.value
         // Roundabout: per-exit icons are hardware-observed (Likely). RE canonically
@@ -390,16 +401,13 @@ class PodService : Service() {
         if (maneuver < 0) return // unmappable instruction: re-send keeps the last icon (RE behavior)
         lastManeuver = maneuver
         val bottom = when (s.bottomMode) {
-            Session.BottomMode.ARRIVAL -> turn.arrivalSecondsFromNow
+            Session.BottomMode.ARRIVAL -> eta(turn)
                 ?.let { PodProtocol.Bottom.Arrival(it, s.is12Hour) }
-            Session.BottomMode.REMAINING -> turn.remainingSeconds
-                ?.let { PodProtocol.Bottom.Remaining(it) }
             Session.BottomMode.TOTAL -> turn.routeRemainingM
                 ?.let { PodProtocol.Bottom.Total(it, s.imperial) }
             Session.BottomMode.CYCLE -> {
                 val available = listOfNotNull(
-                    turn.arrivalSecondsFromNow?.let { PodProtocol.Bottom.Arrival(it, s.is12Hour) },
-                    turn.remainingSeconds?.let { PodProtocol.Bottom.Remaining(it) },
+                    eta(turn)?.let { PodProtocol.Bottom.Arrival(it, s.is12Hour) },
                     turn.routeRemainingM?.let { PodProtocol.Bottom.Total(it, s.imperial) },
                 )
                 if (available.isNotEmpty()) {
@@ -465,6 +473,7 @@ class PodService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun startLiveLocation() {
+        if (liveLocationOn) return
         if (!hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)) return
         val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val provider = when {
@@ -474,11 +483,14 @@ class PodService : Service() {
         }
         try {
             lm.requestLocationUpdates(provider, 1000L, 1.0f, liveLocationListener, mainLooper)
+            liveLocationOn = true
         } catch (_: Exception) {
         }
     }
 
     private fun stopLiveLocation() {
+        if (!liveLocationOn) return
+        liveLocationOn = false
         val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         try {
             lm.removeUpdates(liveLocationListener)

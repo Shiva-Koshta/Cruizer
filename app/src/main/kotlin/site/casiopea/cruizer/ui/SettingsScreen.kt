@@ -53,7 +53,6 @@ private val NIGHT_OPTIONS = listOf(
 
 private val BOTTOM_OPTIONS = listOf(
     Session.BottomMode.TOTAL to "distance",
-    Session.BottomMode.REMAINING to "time left",
     Session.BottomMode.ARRIVAL to "arrival",
     Session.BottomMode.CYCLE to "cycle",
 )
@@ -194,7 +193,9 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                             value = timeoutText,
                             onValueChange = { raw ->
                                 val digits = raw.filter { it.isDigit() }.take(4)
-                                timeoutText = digits
+                                // An empty box must not silently keep the old value: put
+                                // the number back so the field never lies.
+                                timeoutText = digits.ifEmpty { s.disconnectTimeoutMinutes.toString() }
                                 digits.toIntOrNull()?.let { n ->
                                     Session.updateSettings { it.copy(disconnectTimeoutMinutes = n) }
                                 }

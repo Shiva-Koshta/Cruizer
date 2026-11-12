@@ -54,6 +54,25 @@ class NavTextParserTest {
     }
 
     @Test
+    fun routeDistanceNeverBecomesTheTurnDistance() {
+        // The instruction carries no distance; the bottom line's 4.6 km is the
+        // route. It used to be sent as the distance to the turn.
+        val p = NavTextParser.parse(
+            "Turn right onto MG Road\n13 min · 4.6 km · 11:55 ETA",
+            now(11, 0),
+        ) as Parsed.Turn
+        assertNull(p.update.distanceM)
+        assertEquals(4600, p.update.routeRemainingM)
+    }
+
+    @Test
+    fun destinationTextWithRouteDistanceIsNotArrival() {
+        val p = NavTextParser.parse("Your destination is on the right\n13 min · 4.6 km") as Parsed.Turn
+        assertEquals(TurnKind.DESTINATION, p.update.kind)
+        assertFalse(p.update.ended)
+    }
+
+    @Test
     fun mapsBottomLineMiles() {
         val p = NavTextParser.parse("Turn left\n20 mins · 5.2 mi") as Parsed.Turn
         assertEquals(8369, p.update.routeRemainingM) // 5.2 * 1609.34

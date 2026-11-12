@@ -52,9 +52,9 @@ class TurnSource : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         pendingClear?.let { handler.removeCallbacks(it); pendingClear = null }
-        Session.navActive.value = false
-        Session.lastNavSource.value = null
-        Session.postTurn(null)
+        // Losing notification access is global, but a provider-fed route may still
+        // be alive: end only the route this listener's source owns.
+        Session.lastNavSource.value?.let(Session::endRoute)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -80,11 +80,7 @@ class TurnSource : NotificationListenerService() {
             val clear = Runnable {
                 pendingClear = null
                 val stillActive = activeNotifications.any(::isNavSource)
-                if (!stillActive) {
-                    Session.navActive.value = false
-                    Session.lastNavSource.value = null
-                    Session.postTurn(null)
-                }
+                if (!stillActive) Session.endRoute(sbn.packageName)
             }
             pendingClear = clear
             handler.postDelayed(clear, 2500)
@@ -93,7 +89,6 @@ class TurnSource : NotificationListenerService() {
 
     private fun tryParse(sbn: StatusBarNotification) {
         if (!isNavSource(sbn)) return
-        Session.lastNavSource.value = sbn.packageName
         if (site.casiopea.cruizer.BuildConfig.DEBUG && PROBE_PACKAGES.any(sbn.packageName::startsWith)) {
             dumpExtras(sbn)
         }
@@ -103,13 +98,13 @@ class TurnSource : NotificationListenerService() {
         // check (provider+permission), not a package-name whitelist.
         if (sbn.packageName.startsWith("app.comaps") || sbn.packageName == "app.organicmaps") {
             if (ComapsSource.installed(this).any { ComapsSource.granted(this, it) }) {
-                Session.navActive.value = true
+                Session.beginRoute(sbn.packageName)
                 return
             }
         }
         // Any ongoing nav notification means a route is live, even if its text
         // is still idle ("Guiding to…", "Starting navigation…").
-        Session.navActive.value = true
+        Session.beginRoute(sbn.packageName)
         val e = sbn.notification.extras
         val title = e.getCharSequence("android.title")?.toString()?.trim().orEmpty()
         val bigText = e.getCharSequence("android.bigText")?.toString()?.trim().orEmpty()
@@ -130,7 +125,8 @@ class TurnSource : NotificationListenerService() {
 
         when (val p = NavTextParser.parse(body)) {
             is NavTextParser.Parsed.Turn -> {
-                if (p.update.ended) Session.navActive.value = false // arrived: route over
+                // Arrival must stop the ride, like the other two sources.
+                Session.beginRoute(sbn.packageName, ended = p.update.ended)
                 val update = if (iconKind != null && iconKind != site.casiopea.cruizer.proto.TurnKind.UNKNOWN) {
                     p.update.copy(kind = iconKind)
                 } else {

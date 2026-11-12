@@ -2,7 +2,6 @@ package site.casiopea.cruizer
 
 import site.casiopea.cruizer.notify.MapsScreenTextParser
 import site.casiopea.cruizer.notify.MapsScreenTextParser.ScreenLine
-import site.casiopea.cruizer.notify.NavTextParser
 import site.casiopea.cruizer.proto.TurnKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -21,7 +20,7 @@ class MapsScreenTextParserTest {
     }
 
     private fun turn(lines: List<ScreenLine>): site.casiopea.cruizer.proto.TurnUpdate =
-        (MapsScreenTextParser.extract(lines, noon()) as NavTextParser.Parsed.Turn).update
+        MapsScreenTextParser.extract(lines, noon())!!
 
     @Test
     fun plainMapBrowseIsIgnored() {

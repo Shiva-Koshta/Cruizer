@@ -117,6 +117,9 @@ class PodLink(private val context: Context) {
 
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
             if (client !== g) return
+            // status is the only delivery signal there is: a rejected write is
+            // otherwise indistinguishable from a delivered one. Re-queue it.
+            if (status != BluetoothGatt.GATT_SUCCESS) c.value?.let { queue.offer(it) }
             drain()
         }
 
@@ -279,6 +282,8 @@ class PodLink(private val context: Context) {
         c.value = b
         @Suppress("DEPRECATION")
         val ok = client?.writeCharacteristic(c)
+        // true = handed to the stack, not delivered; a failure re-queues the frame
+        // from onCharacteristicWrite.
         if (ok == true) queue.poll() else if (ok == false) Log.i("CruizerNav", "BLE write rejected")
     }
 

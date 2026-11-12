@@ -105,32 +105,21 @@ class MapsScreenSource : AccessibilityService() {
             return
         }
         navClear?.let { handler.removeCallbacks(it); navClear = null }
-        val parsed = MapsScreenTextParser.extract(lines) ?: return
-        Session.lastNavSource.value = MAPS_PACKAGE
-        when (parsed) {
-            is NavTextParser.Parsed.Turn -> {
-                val update = merge(parsed.update)
-                if (update.ended) Session.navActive.value = false // arrived
-                else if (!Session.navActive.value) Session.navActive.value = true
-                Session.postTurn(update)
-            }
-            // No actionable text yet (route just started): the screen IS a live
-            // route, so nav liveness comes from the nav-mode gate alone.
-            NavTextParser.Parsed.Idle -> Session.navActive.value = true
-        }
+        val update = merge(MapsScreenTextParser.extract(lines) ?: return)
+        Session.beginRoute(MAPS_PACKAGE, ended = update.ended)
+        Session.postTurn(update)
     }
 
     /**
      * A Maps window without nav controls means the rider exited navigation.
      * Debounce it: one empty snapshot mid-turn must not reset the ride timer.
+     * [Session.endRoute] ignores this when another app owns the route.
      */
     private fun scheduleNavClear() {
         if (navClear != null || !Session.navActive.value) return
         val r = Runnable {
             navClear = null
-            if (!Session.navActive.value) return@Runnable
-            Session.navActive.value = false
-            Session.postTurn(null)
+            Session.endRoute(MAPS_PACKAGE)
         }
         navClear = r
         handler.postDelayed(r, NAV_CLEAR_MS)

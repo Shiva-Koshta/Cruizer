@@ -1,5 +1,7 @@
 package site.casiopea.cruizer.proto
 
+import kotlin.math.roundToInt
+
 /**
  * Tripper Pod BLE protocol engine.
  *
@@ -84,7 +86,7 @@ object PodProtocol {
             else intArrayOf(rounded / 100, 2)
         }
         val feet = (rounded * 3.281).toInt()
-        return if (feet > 550) intArrayOf((meters * 6.21371192E-4 * 10).toInt(), 3)
+        return if (feet > 550) intArrayOf((meters * 6.21371192E-4 * 10).roundToInt(), 3)
         else intArrayOf(feet, 4)
     }
 
@@ -108,10 +110,12 @@ object PodProtocol {
     private fun isKeep(code: Int) =
         code == Icons.KEEP_LANE_LEFT.code || code == Icons.KEEP_LANE_RIGHT.code
 
-    /** Bottom line: ETA arrival time (fmt 0/1/2), time remaining (fmt 10/20/30) or total distance. */
+    /**
+     * Bottom line: ETA arrival time (fmt 0/1/2) or total distance. The Pod has no
+     * time-remaining format, so "time left" is sent as the clock it points at.
+     */
     sealed interface Bottom {
         data class Arrival(val secondsFromNow: Int, val is12hFormat: Boolean) : Bottom
-        data class Remaining(val seconds: Int) : Bottom
         data class Total(val meters: Int, val imperial: Boolean) : Bottom
 
         /** No data for the selected mode: blank the line rather than showing a false "0 m". */
@@ -147,7 +151,6 @@ object PodProtocol {
                 if (fmt == 0) "%02d:%02d".format(java.util.Locale.US, h, lo)
                 else "%d:%02d %s".format(java.util.Locale.US, h, lo, if (fmt == 1) "AM" else "PM")
             }
-            is Bottom.Remaining -> "%d:%02d".format(java.util.Locale.US, hi, lo)
             is Bottom.Total -> distanceLabel((hi shl 8) or lo, b[2].toInt() and 0xFF)
             Bottom.None -> null
         }
@@ -171,14 +174,6 @@ object PodProtocol {
                     else (if (h24 < 12) 0x01 else 0x02) to (if (h24 % 12 == 0) 12 else h24 % 12)
                 p[0] = ((fmt shl 6) or (hourPart and 0x3F)).toByte()
                 p[1] = cal.get(java.util.Calendar.MINUTE).toByte()
-            }
-            is Bottom.Remaining -> {
-                // The verified layout has no "time remaining" format (wazetripper's
-                // fmt 10/20 doesn't fit the byte); render it as a clock-style h:mm
-                // with etaFormat 0. Hours cap at 63 (6 bits) — past that (2.6 days)
-                // the caller should fall back to distance.
-                p[0] = ((bottom.seconds / 3600).coerceAtMost(63) and 0x3F).toByte()
-                p[1] = (bottom.seconds % 3600 / 60).toByte()
             }
             is Bottom.Total -> {
                 val (v, u) = encodeDistance(bottom.meters, bottom.imperial)

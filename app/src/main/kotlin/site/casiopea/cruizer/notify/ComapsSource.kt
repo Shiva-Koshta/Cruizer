@@ -138,24 +138,20 @@ object ComapsSource {
                     when {
                         update != null -> {
                             // Arrival must stop the ride, like the other two sources.
-                            Session.navActive.value = !update.ended
-                            Session.lastNavSource.value = pkg
+                            Session.beginRoute(pkg, ended = update.ended)
                             Session.postTurn(update)
                             owned = true
                         }
                         owned -> {
                             // empty cursor = navigation ended; clear only our own turn
-                            Session.navActive.value = false
-                            Session.lastNavSource.value = null
-                            Session.postTurn(null)
+                            Session.endRoute(pkg)
                             owned = false
                         }
                     }
                 } catch (_: SecurityException) {
                     // rider revoked CoMaps permission mid-session; drop own turn safely
                     if (owned) {
-                        Session.navActive.value = false
-                        Session.postTurn(null)
+                        Session.endRoute(pkg)
                         owned = false
                     }
                 } catch (_: Exception) {

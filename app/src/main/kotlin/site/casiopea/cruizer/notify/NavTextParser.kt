@@ -100,12 +100,18 @@ object NavTextParser {
     }
 
     private fun build(lower: String, now: Calendar): TurnUpdate {
-        val distance = DISTANCE.find(lower)?.let(::toMeters)
+        val maps3 = MAPS_BOTTOM_3.find(lower)
+        val mapsBottom = maps3 ?: MAPS_BOTTOM.find(lower)
+        // The bottom line's route distance must never become the distance to the
+        // turn: a distance-less instruction ("Turn right onto MG Road") would
+        // otherwise show 4.6 km for a turn 50 m away.
+        val instruction = lower.substring(0, mapsBottom?.range?.first ?: lower.length)
+        val distance = DISTANCE.find(instruction)?.let(::toMeters)
+        // "Arrived" still means no distance anywhere in the body.
+        val anyDistance = DISTANCE.find(lower)?.let(::toMeters)
         val exit = EXIT.find(lower)?.groupValues
             ?.let { g -> (g[1].ifEmpty { g[2] }).toIntOrNull() }
             ?.takeIf { it in 1..9 }
-        val maps3 = MAPS_BOTTOM_3.find(lower)
-        val mapsBottom = maps3 ?: MAPS_BOTTOM.find(lower)
         // Maps' subText "Arrive 10:20" is the ETA, not a destination maneuver.
         val kind = kindOf(ARRIVAL.replace(lower, " "))
         return TurnUpdate(
@@ -122,7 +128,7 @@ object NavTextParser {
                 ?: mapsBottom?.let(::bottomRemaining),
             remainingSeconds = remainingSeconds(lower)
                 ?: mapsBottom?.groupValues?.get(1)?.toIntOrNull()?.times(60),
-            ended = kind == TurnKind.DESTINATION && distance == null,
+            ended = kind == TurnKind.DESTINATION && anyDistance == null,
         )
     }
 

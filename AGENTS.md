@@ -30,8 +30,9 @@ BLE with turn-by-turn data parsed from nav apps. One rider, one phone.
 ## Architecture in three sources
 
 - `PodService` — foreground service; owns BLE (`PodLink`: GATT client + mirror GATT server),
-  1 Hz tick renders `Session` state into frames, PING watchdog, self-stops after 5 min
-  unconnected ("Connect" button revives). Pairing = PIN handshake (0x20 01).
+  1 Hz tick renders `Session` state into frames, PING watchdog, self-stops after the
+  "Disconnect timeout" setting (default 60 min, 0 = first tick after a real disconnect)
+  ("Connect" button revives). Pairing = PIN handshake (0x20 01).
 - `TurnSource` — NotificationListenerService over nav apps (OsmAnd, Organic Maps, GMaps, Waze).
   Text parsing lives in pure `NavTextParser`. Quirks: Maps updates its notification at most
   ~once/min, carries the turn in `title` + bottom line in `subText`; "Guiding to…" and

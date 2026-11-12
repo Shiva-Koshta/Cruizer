@@ -24,7 +24,7 @@ class PodProtocolTest {
             imperial = false,
             next = null,
             nextDistanceM = null,
-            bottom = PodProtocol.Bottom.Remaining(600),
+            bottom = PodProtocol.Bottom.Total(600, false),
             night = false,
         )
         assertEquals(20, f.size)
@@ -109,7 +109,7 @@ class PodProtocolTest {
             imperial = false,
             next = Icons.STRAIGHT.code, // 0x09
             nextDistanceM = 220,
-            bottom = PodProtocol.Bottom.Remaining(2 * 3600 + 5 * 60),
+            bottom = PodProtocol.Bottom.Total(15200, false),
             night = true,
         )
         assertEquals(0x15, f[2].toInt())
@@ -123,10 +123,10 @@ class PodProtocolTest {
         val nextVal = PodProtocol.encodeDistance(220, false)
         assertEquals(nextVal[0], ((f[8].toInt() and 0xFF) shl 8) or (f[9].toInt() and 0xFF))
         assertEquals(nextVal[1], (f[10].toInt() ushr 4) and 0x0F)
-        // Bottom: time mode, etaFormat 0, remaining rendered h:mm = 2:05
-        assertEquals(2, f[11].toInt())
-        assertEquals(5, f[12].toInt())
-        assertEquals(0, f[13].toInt())
+        // Bottom: distance mode, 15200 m -> 152 deci-km, unit 2.
+        assertEquals(0, f[11].toInt())
+        assertEquals(152, f[12].toInt() and 0xFF)
+        assertEquals(2, f[13].toInt())
     }
 
     @Test
@@ -156,7 +156,7 @@ class PodProtocolTest {
         // imperial beyond 550 ft switches to tenth-miles
         val tenMiles = PodProtocol.encodeDistance(16093, true)
         assertEquals(3, tenMiles[1])
-        assertEquals(99, tenMiles[0]) // 10 mi x10, truncated
+        assertEquals(100, tenMiles[0]) // 10 mi x10, rounded (truncation showed 9.9)
     }
 
     @Test
@@ -189,7 +189,6 @@ class PodProtocolTest {
         val now = java.util.GregorianCalendar(2026, java.util.Calendar.NOVEMBER, 7, 10, 0).timeInMillis
         assertEquals("10:20", PodProtocol.bottomLabel(PodProtocol.Bottom.Arrival(20 * 60, false), now))
         assertEquals("10:20 AM", PodProtocol.bottomLabel(PodProtocol.Bottom.Arrival(20 * 60, true), now))
-        assertEquals("1:05", PodProtocol.bottomLabel(PodProtocol.Bottom.Remaining(3900), now))
         assertEquals("1.2 km", PodProtocol.bottomLabel(PodProtocol.Bottom.Total(1234, false), now))
         assertNull(PodProtocol.bottomLabel(PodProtocol.Bottom.None, now))
     }

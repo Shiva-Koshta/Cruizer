@@ -58,6 +58,7 @@ fun OnboardingScreen(
 
     val btPerms = context.has(Manifest.permission.BLUETOOTH_CONNECT) &&
         context.has(Manifest.permission.BLUETOOTH_SCAN)
+    val notif = context.has(Manifest.permission.POST_NOTIFICATIONS)
     val location = context.has(Manifest.permission.ACCESS_FINE_LOCATION)
     val listener = listenerGranted(context)
     val phone = context.has(Manifest.permission.READ_PHONE_STATE)
@@ -72,7 +73,7 @@ fun OnboardingScreen(
     val comapsPerms = site.casiopea.cruizer.notify.ComapsSource.permissions(context)
     // Location stays optional: BLE is neverForLocation and turn data comes from
     // notifications/provider. Location only enriches the trip + AUTO night mode.
-    val allRequiredGranted = btPerms && listener
+    val allRequiredGranted = context.hasRequiredPermissions()
     val mapsInstalled = runCatching {
         context.packageManager.getPackageInfo("com.google.android.apps.maps", 0)
     }.isSuccess
@@ -106,8 +107,8 @@ fun OnboardingScreen(
         PermissionCard(
             emoji = "📡",
             title = "Nearby devices (Bluetooth)",
-            description = "Required to scan, connect, and stream navigation frames to your Tripper Pod.",
-            ready = btPerms,
+            description = "Required to scan, connect, and stream navigation frames to your Tripper Pod — and to show its status notification.",
+            ready = btPerms && notif,
             required = true,
             actionLabel = "Grant Permission",
         ) {

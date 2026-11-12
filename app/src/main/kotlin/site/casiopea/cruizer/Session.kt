@@ -31,7 +31,10 @@ internal val Context.cruiserStore by preferencesDataStore("cruizer")
 object Session {
 
     private const val KEY_NIGHT = "night_mode"
-    private const val KEY_BOTTOM = "bottom_mode"
+
+    // Renamed when "time left" was dropped: the Pod's bottom line has no
+    // time-remaining format, and old ordinals would land on the wrong mode.
+    private const val KEY_BOTTOM = "bottom_mode_v2"
     private const val KEY_THEME = "theme_mode"
     private const val KEY_CYCLE_INTERVAL = "cycle_interval"
     private const val KEY_SAVED_PODS = "saved_pods"
@@ -70,7 +73,7 @@ object Session {
                         nightMode = NightMode.entries
                             .getOrElse(p[intPreferencesKey(KEY_NIGHT)] ?: 2) { NightMode.AUTO },
                         bottomMode = BottomMode.entries
-                            .getOrElse(p[intPreferencesKey(KEY_BOTTOM)] ?: 2) { BottomMode.ARRIVAL },
+                            .getOrElse(p[intPreferencesKey(KEY_BOTTOM)] ?: 1) { BottomMode.ARRIVAL },
                         themeMode = themeChoice,
                         cycleIntervalSeconds = p[intPreferencesKey(KEY_CYCLE_INTERVAL)] ?: 5,
                         twentyFourHourClock = p[booleanPreferencesKey("clock_24h")] ?: false,
@@ -99,7 +102,7 @@ object Session {
     enum class NightMode { DAY, NIGHT, AUTO }
 
     /** What the Pod's bottom line shows while navigating. */
-    enum class BottomMode { TOTAL, REMAINING, ARRIVAL, CYCLE }
+    enum class BottomMode { TOTAL, ARRIVAL, CYCLE }
 
     /** The app's own theme; independent of the night-mode setting. */
     enum class ThemeMode { SYSTEM, LIGHT, DARK }
@@ -151,6 +154,10 @@ object Session {
 
     private val _settings = MutableStateFlow(Settings())
     val settings: StateFlow<Settings> = _settings
+
+    // Narrow mirrors of two settings fields, on purpose: CruiserGlassCard and the
+    // pill bar are on the 120 fps path, so they must not recompose on every
+    // settings change (e.g. each keystroke in the timeout field).
     val isLiquidGlass = MutableStateFlow(true)
     val themeMode = MutableStateFlow(ThemeMode.SYSTEM)
     val onboardingCompleted = MutableStateFlow(false)
@@ -215,7 +222,6 @@ object Session {
 
     fun resetLiveRide() {
         lastLiveLoc = null
-        hasFix.value = false
         _liveRide.value = LiveRide()
     }
 
@@ -364,6 +370,26 @@ object Session {
             )
         }
         _currentTurn.value = t
+    }
+
+    /**
+     * A source has live route data: it takes ownership of the route (last writer
+     * wins) and, unless the update is the arrival, marks navigation active.
+     */
+    fun beginRoute(pkg: String, ended: Boolean = false) {
+        lastNavSource.value = pkg
+        navActive.value = !ended
+    }
+
+    /**
+     * Only the source that currently owns the route may end it. Without this a
+     * browse screen in one app tore down a ride another app was still guiding.
+     */
+    fun endRoute(pkg: String) {
+        if (lastNavSource.value != pkg) return
+        lastNavSource.value = null
+        navActive.value = false
+        postTurn(null)
     }
 
     /** BLE link state, mirrored in by the Pod service for the UI. */
