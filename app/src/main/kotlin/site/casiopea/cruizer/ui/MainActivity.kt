@@ -97,11 +97,7 @@ import kotlinx.coroutines.launch
 /** Launcher. First-run onboarding gate, then three tabs: Pod / Trips / Settings. */
 class MainActivity : ComponentActivity() {
 
-    /** Tabs + the debug-only playground page; a nav library would be overkill. */
-    private val page = MutableStateFlow(Page.POD)
-
-    private enum class Page { POD, SETTINGS, PLAYGROUND }
-
+    /** Tabs; the debug-only playground is a boolean, not a page. */
     companion object {
         /**
          * Bumped on every resume and after permission dialogs — code reading it
@@ -672,10 +668,11 @@ private fun PinDialog() {
     )
 }
 
+// Location stays out: it is optional everywhere else, so gating Connect on it
+// made the button silently dead for riders who denied it.
 private fun Context.hasRequiredPermissions(): Boolean =
     has(Manifest.permission.BLUETOOTH_CONNECT) &&
         has(Manifest.permission.BLUETOOTH_SCAN) &&
-        has(Manifest.permission.ACCESS_FINE_LOCATION) &&
         listenerGranted(this)
 
 internal fun Context.podStart(mac: String? = null) {
@@ -683,12 +680,12 @@ internal fun Context.podStart(mac: String? = null) {
         MainActivity.gate.value = MainActivity.gate.value + 1
         return
     }
-    // Instant press feedback; the service overwrites this with real states.
-    Session.linkState.value = LinkState.CONNECTING
     val intent = Intent(this, PodService::class.java).setAction(PodService.ACTION_START)
     if (mac != null) intent.putExtra(PodService.EXTRA_MAC, mac)
     try {
         ContextCompat.startForegroundService(this, intent)
+        // Instant press feedback; the service overwrites this with real states.
+        Session.linkState.value = LinkState.CONNECTING
     } catch (_: Exception) {
         MainActivity.gate.value = MainActivity.gate.value + 1
     }
@@ -699,11 +696,11 @@ internal fun Context.podScanNew() {
         MainActivity.gate.value = MainActivity.gate.value + 1
         return
     }
-    Session.linkState.value = LinkState.SCANNING
     val intent = Intent(this, PodService::class.java).setAction(PodService.ACTION_START)
     intent.putExtra(PodService.EXTRA_SCAN_NEW, true)
     try {
         ContextCompat.startForegroundService(this, intent)
+        Session.linkState.value = LinkState.SCANNING
     } catch (_: Exception) {
         MainActivity.gate.value = MainActivity.gate.value + 1
     }

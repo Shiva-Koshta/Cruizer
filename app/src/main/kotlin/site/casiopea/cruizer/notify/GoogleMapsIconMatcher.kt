@@ -126,16 +126,6 @@ object GoogleMapsIconMatcher {
             0x07800000.toInt(), 0x07800000.toInt(), 0x07800000.toInt(), 0x07800000.toInt(),
             0x00000000.toInt(), 0x00000000.toInt(), 0x00000000.toInt(), 0x00000000.toInt()
         )),
-        Template(TurnKind.SLIGHT_RIGHT, intArrayOf(
-            0x00000000.toInt(), 0x00000000.toInt(), 0x00000000.toInt(), 0x00000000.toInt(),
-            0x0001FFE0.toInt(), 0x0001FFE0.toInt(), 0x0001FFE0.toInt(), 0x000007E0.toInt(),
-            0x00000FE0.toInt(), 0x00001FE0.toInt(), 0x00003FE0.toInt(), 0x00007DE0.toInt(),
-            0x0000F9E0.toInt(), 0x0001F1E0.toInt(), 0x0003E1E0.toInt(), 0x0003C0C0.toInt(),
-            0x00078000.toInt(), 0x00078000.toInt(), 0x000F0000.toInt(), 0x000F0000.toInt(),
-            0x000F0000.toInt(), 0x000F0000.toInt(), 0x000F0000.toInt(), 0x000F0000.toInt(),
-            0x000F0000.toInt(), 0x000F0000.toInt(), 0x000F0000.toInt(), 0x000F0000.toInt(),
-            0x00000000.toInt(), 0x00000000.toInt(), 0x00000000.toInt(), 0x00000000.toInt()
-        )),
         Template(TurnKind.U_TURN, intArrayOf(
             0x00000000.toInt(), 0x00000000.toInt(), 0x00000000.toInt(), 0x00000000.toInt(),
             0x0000FC00.toInt(), 0x0003FF00.toInt(), 0x0007FF80.toInt(), 0x000F8FC0.toInt(),

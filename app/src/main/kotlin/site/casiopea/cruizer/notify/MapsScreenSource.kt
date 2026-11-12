@@ -26,6 +26,9 @@ class MapsScreenSource : AccessibilityService() {
         private const val MAPS_PACKAGE = "com.google.android.apps.maps"
         private const val THROTTLE_MS = 250L
 
+        /** Grace before a Maps window with no nav controls ends the route. */
+        private const val NAV_CLEAR_MS = 2000L
+
         fun start(context: Context) {
             context.startActivity(
                 Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
@@ -48,6 +51,8 @@ class MapsScreenSource : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var snapshotScheduled = false
+    private var navClear: Runnable? = null
+    private var lastCapture = ""
 
     override fun onServiceConnected() {
         Session.mapsA11yConnected.value = true
@@ -58,6 +63,7 @@ class MapsScreenSource : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         // Toggle flipped off (or ROM reset it): silently fall back to notifications.
+        navClear?.let { handler.removeCallbacks(it); navClear = null }
         Session.mapsA11yConnected.value = false
         return super.onUnbind(intent)
     }
@@ -85,11 +91,20 @@ class MapsScreenSource : AccessibilityService() {
         val lines = ArrayList<MapsScreenTextParser.ScreenLine>()
         walk(root, screenH, lines)
         if (lines.isEmpty()) return
-        // Debug-only capture, same convention as notifications: logcat + Settings card.
-        // y is included so the top/bottom split can be calibrated from real rides.
-        Session.captureNotif(
-            "maps-a11y: " + lines.joinToString(" | ") { "%.2f:${it.text}".format(it.y) },
-        )
+        val navigating = MapsScreenTextParser.isNavigating(lines)
+        // Debug capture, same convention as notifications: logcat + Settings card.
+        // Only when the text changes, not 4x/s for the whole ride.
+        val capture = "maps-a11y: nav=$navigating " +
+            lines.joinToString(" | ") { "%.2f:${it.text}".format(it.y) }
+        if (capture != lastCapture) {
+            lastCapture = capture
+            Session.captureNotif(capture)
+        }
+        if (!navigating) {
+            scheduleNavClear()
+            return
+        }
+        navClear?.let { handler.removeCallbacks(it); navClear = null }
         val parsed = MapsScreenTextParser.extract(lines) ?: return
         Session.lastNavSource.value = MAPS_PACKAGE
         when (parsed) {
@@ -101,8 +116,24 @@ class MapsScreenSource : AccessibilityService() {
             }
             // No actionable text yet (route just started): the screen IS a live
             // route, so nav liveness comes from the nav-mode gate alone.
-            else -> Session.navActive.value = true
+            NavTextParser.Parsed.Idle -> Session.navActive.value = true
         }
+    }
+
+    /**
+     * A Maps window without nav controls means the rider exited navigation.
+     * Debounce it: one empty snapshot mid-turn must not reset the ride timer.
+     */
+    private fun scheduleNavClear() {
+        if (navClear != null || !Session.navActive.value) return
+        val r = Runnable {
+            navClear = null
+            if (!Session.navActive.value) return@Runnable
+            Session.navActive.value = false
+            Session.postTurn(null)
+        }
+        navClear = r
+        handler.postDelayed(r, NAV_CLEAR_MS)
     }
 
     /**

@@ -74,10 +74,16 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
     }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
-    val comapsPerms = remember(context) { site.casiopea.cruizer.notify.ComapsSource.permissions(context) }
+    var permsVersion by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val comapsPerms = remember(context, permsVersion) {
+        site.casiopea.cruizer.notify.ComapsSource.permissions(context)
+    }
     val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
-    ) { site.casiopea.cruizer.notify.ComapsSource.start(context) }
+    ) {
+        permsVersion++
+        site.casiopea.cruizer.notify.ComapsSource.start(context)
+    }
     val notifs by site.casiopea.cruizer.Session.recentNotifs.collectAsState()
 
     LazyColumn(

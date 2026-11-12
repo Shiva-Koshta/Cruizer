@@ -37,7 +37,7 @@ class MapsScreenTextParserTest {
     fun bottomBarFeedsRouteSummary() {
         val u = turn(
             at(0.1f, "In 500 m", "Turn right onto Market St") +
-                at(0.9f, "4.6 km", "13 min", "12:30 PM", "Exit"),
+                at(0.9f, "4.6 km", "13 min", "12:30 PM", "Exit", "Mute"),
         )
         assertEquals(TurnKind.RIGHT, u.kind)
         assertEquals(500, u.distanceM)
@@ -52,7 +52,7 @@ class MapsScreenTextParserTest {
         // on screen is the bottom bar's route remaining.
         val u = turn(
             at(0.1f, "Turn left onto 5th Ave") +
-                at(0.9f, "4.6 km", "13 min", "Exit"),
+                at(0.9f, "4.6 km", "13 min", "Exit", "Mute"),
         )
         assertEquals(TurnKind.LEFT, u.kind)
         assertNull(u.distanceM)
@@ -64,7 +64,7 @@ class MapsScreenTextParserTest {
         // Maps may expose the whole bottom bar as one node instead of three.
         val u = turn(
             at(0.1f, "In 300 m", "Turn right") +
-                at(0.9f, "Exit navigation, 4.6 km, 13 min, arrive 12:30 PM"),
+                at(0.9f, "Exit navigation, Mute, 4.6 km, 13 min, arrive 12:30 PM"),
         )
         assertEquals(TurnKind.RIGHT, u.kind)
         assertEquals(300, u.distanceM)
@@ -77,7 +77,7 @@ class MapsScreenTextParserTest {
     fun hoursAndMinutes() {
         val u = turn(
             at(0.1f, "In 800 m", "Turn right") +
-                at(0.9f, "1 h 20 min", "58 km", "Exit"),
+                at(0.9f, "1 h 20 min", "58 km", "Exit", "Mute"),
         )
         assertEquals((60 + 20) * 60, u.remainingSeconds)
         assertEquals(58_000, u.routeRemainingM)
@@ -87,7 +87,7 @@ class MapsScreenTextParserTest {
     fun speedIsNotMistakenForDistance() {
         val u = turn(
             at(0.1f, "In 500 m", "Turn right") +
-                at(0.9f, "52 km/h", "13 min", "Exit"),
+                at(0.9f, "52 km/h", "13 min", "Exit", "Mute"),
         )
         assertEquals(500, u.distanceM)
         assertNull(u.routeRemainingM)
@@ -96,7 +96,7 @@ class MapsScreenTextParserTest {
     @Test
     fun duplicateNodesDeduplicate() {
         val u = turn(
-            at(0.1f, "500 m", "500 m", "Turn left") + at(0.9f, "Exit", "13 min"),
+            at(0.1f, "500 m", "500 m", "Turn left") + at(0.9f, "Exit", "Mute", "13 min"),
         )
         assertEquals(TurnKind.LEFT, u.kind)
         assertEquals(500, u.distanceM)

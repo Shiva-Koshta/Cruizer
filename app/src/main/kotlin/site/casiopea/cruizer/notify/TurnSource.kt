@@ -58,7 +58,10 @@ class TurnSource : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        pendingClear?.let { handler.removeCallbacks(it); pendingClear = null }
+        // Only a nav app's post means the route is still alive. Cancelling on
+        // every notification (a message landing after arrival) kept the Pod
+        // stuck on the last arrow forever.
+        if (isNavSource(sbn)) pendingClear?.let { handler.removeCallbacks(it); pendingClear = null }
         tryParse(sbn)
     }
 
@@ -135,7 +138,6 @@ class TurnSource : NotificationListenerService() {
                 }
                 Session.postTurn(update)
             }
-            is NavTextParser.Parsed.Camera -> {}
             NavTextParser.Parsed.Idle -> {}
         }
     }

@@ -63,7 +63,6 @@ class PodService : Service() {
     private var tickJob: Job? = null
     private var telephonyCallback: TelephonyCallback? = null
     private var lastFrameSentAt = 0L
-    private var lastTurn: TurnUpdate? = null
     private var lastManeuver: Int? = null
     private var sentSplash = false
 
@@ -82,7 +81,8 @@ class PodService : Service() {
         link.onCommand = ::onPodCommand
         observe()
         restorePairedAddress()
-        // GPS listening is live while connected
+        // Seed the last known position so AUTO night mode is right before the
+        // first live fix arrives; the live listener below takes over.
         refreshLocation()
         // Live GPS for the whole service lifetime: trip recording continues even
         // while the Pod is out of range, and start/stopLG is not tied to BLE.
@@ -201,7 +201,6 @@ class PodService : Service() {
                 // The recorded trip survives: BLE drops mid-ride must not erase the ride.
                 lastFrameSentAt = 0
                 sentSplash = false
-                lastTurn = Session.currentTurn.value
                 Session.podScreen.value = null
                 awaitPin(false)
             }
@@ -216,10 +215,13 @@ class PodService : Service() {
             }
         }.launchIn(scope)
 
+        // Local mirror only to detect the null -> turn edge; the shared state
+        // lives in Session.currentTurn.
+        var prevTurn: TurnUpdate? = null
         Session.currentTurn.onEach { t ->
             if (t == null) lastManeuver = null
-            if (lastTurn == null && t != null) sentSplash = false
-            lastTurn = t
+            if (prevTurn == null && t != null) sentSplash = false
+            prevTurn = t
             if (t != null && link.state.value == LinkState.DISCONNECTED) link.scanOrConnect(bleReady())
             // Fire the route splash the instant nav data lands instead of waiting
             // for the next 1 Hz tick (up to a second of dead Pod screen).
@@ -340,7 +342,24 @@ class PodService : Service() {
             return
         }
         if (turn.ended) {
+            // Show the arrival flag once, then clear the turn so the next tick
+            // falls back to PING/clock. Previously this branch skipped the icon
+            // entirely, so Icons.DESTINATION could never reach the Pod.
+            link.send(
+                PodProtocol.navFrame(
+                    maneuver = Icons.DESTINATION.code,
+                    distanceM = 0,
+                    imperial = Session.settings.value.imperial,
+                    next = null,
+                    nextDistanceM = null,
+                    bottom = PodProtocol.Bottom.None,
+                    night = night,
+                    now = now,
+                )
+            )
+            Session.podScreen.value = PodProtocol.PodScreen(Icons.DESTINATION.code, "", null, night)
             Session.postTurn(null)
+            lastFrameSentAt = now
             return
         }
         if (!sentSplash) {
@@ -399,6 +418,7 @@ class PodService : Service() {
             bottom = bottom,
             night = night,
             exit = if (turn.exit != null) turn.exit else 0,
+            now = now,
         )
         link.send(f)
         Session.podScreen.value =
@@ -475,17 +495,6 @@ class PodService : Service() {
                 Session.lastLat = it.latitude
                 Session.lastLon = it.longitude
             }
-        for (provider in lm.allProviders) {
-            try {
-                lm.requestSingleUpdate(provider, object : LocationListener {
-                    override fun onLocationChanged(location: android.location.Location) {
-                        Session.lastLat = location.latitude
-                        Session.lastLon = location.longitude
-                    }
-                }, null)
-            } catch (_: Exception) {
-            }
-        }
     }
 
     private fun registerPhoneState() {

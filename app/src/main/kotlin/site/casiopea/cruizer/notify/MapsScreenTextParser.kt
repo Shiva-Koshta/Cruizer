@@ -39,22 +39,20 @@ object MapsScreenTextParser {
 
     /**
      * Returns the turn when the window is a live route, or null when it isn't
-     * (no nav control found — never parse a merely-open Maps app).
+     * (no nav controls found — never parse a merely-open Maps app).
      */
     fun extract(lines: List<ScreenLine>, now: Calendar = Calendar.getInstance()): NavTextParser.Parsed? {
         val clean = lines
             .map { ScreenLine(it.text.trim(), it.y) }
             .filter { it.text.isNotEmpty() }
-            .distinctBy { it.text }
+            .distinctBy { it.text to it.y }
         if (clean.isEmpty()) return null
-        val all = clean.joinToString("\n") { it.text }.lowercase()
-        if (NAV_CONTROLS.none(all::contains)) return null
+        if (!isNavigating(clean)) return null
 
         val summary = clean.filter { it.y >= SUMMARY_TOP }.joinToString(", ") { it.text }
         val instruction = clean.filter { it.y < SUMMARY_TOP }.joinToString("\n") { it.text }
 
         val parsed = NavTextParser.parse(instruction, now)
-        if (parsed is NavTextParser.Parsed.Camera) return parsed
         val turn = (parsed as? NavTextParser.Parsed.Turn)?.update ?: TurnUpdate(TurnKind.UNKNOWN, null)
         return NavTextParser.Parsed.Turn(
             turn.copy(
@@ -63,6 +61,16 @@ object MapsScreenTextParser {
                 arrivalSecondsFromNow = summaryEta(summary, now) ?: turn.arrivalSecondsFromNow,
             ),
         )
+    }
+
+    /**
+     * True when [lines] come from Maps' live navigation screen, not a browse or
+     * search screen. Two controls, not one: a search result named "Exit 5
+     * Parking" must not pass the gate on its own.
+     */
+    fun isNavigating(lines: List<ScreenLine>): Boolean {
+        val all = lines.joinToString("\n") { it.text }.lowercase()
+        return NAV_CONTROLS.count(all::contains) >= 2
     }
 
     /** Distance token from the bottom bar; the local regex rejects "52 km/h". */

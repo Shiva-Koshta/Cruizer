@@ -45,6 +45,9 @@ object Session {
     @Volatile private var store: DataStore<Preferences>? = null
     @Volatile private var initialized = false
 
+    /** A settings change landed before the stored values finished loading. */
+    @Volatile private var settingsTouched = false
+
     /** Load stored settings once and keep persisting every change from now on. */
     fun init(context: Context) {
         if (initialized) return
@@ -53,11 +56,14 @@ object Session {
             store = context.applicationContext.cruiserStore
             initialized = true
             scope.launch {
-                store?.data?.first()?.let { p ->
-                    val theme = NightMode.entries
-                    val themeChoice = ThemeMode.entries
-                        .getOrElse(p[intPreferencesKey(KEY_THEME)] ?: 0) { ThemeMode.SYSTEM }
-                    val glassChoice = p[booleanPreferencesKey("liquid_glass")] ?: true
+                // A corrupt/unreadable store must not leave the app stuck on
+                // defaults forever: fall through and let onboarding run once.
+                val p = runCatching { store?.data?.first() }.getOrNull() ?: return@launch
+                val themeChoice = ThemeMode.entries
+                    .getOrElse(p[intPreferencesKey(KEY_THEME)] ?: 0) { ThemeMode.SYSTEM }
+                val glassChoice = p[booleanPreferencesKey("liquid_glass")] ?: true
+                // Don't clobber a setting the rider changed while we were reading.
+                if (!settingsTouched) {
                     themeMode.value = themeChoice
                     isLiquidGlass.value = glassChoice
                     _settings.value = _settings.value.copy(
@@ -73,19 +79,19 @@ object Session {
                         liquidGlass = glassChoice,
                         disconnectTimeoutMinutes = p[intPreferencesKey(KEY_DISCONNECT_TIMEOUT)] ?: 60,
                     )
-                    var pods = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
-                    val rememberedMac = context.getSharedPreferences("pod", Context.MODE_PRIVATE)
-                        .getString("pod_mac", null)
-                    if (rememberedMac != null && pods.none { it.mac == rememberedMac }) {
-                        pods = pods + SavedPod(rememberedMac, "My Bike", BikeModel.METEOR_350)
-                        persistSavedPods(pods)
-                    }
-                    _savedPods.value = pods
-                    val storedActive = p[stringPreferencesKey(KEY_ACTIVE_BIKE_MAC)]
-                    activeBikeMac.value = storedActive ?: rememberedMac ?: pods.firstOrNull()?.mac
-                    val onboarded = p[booleanPreferencesKey(KEY_ONBOARDING_COMPLETED)] ?: false
-                    onboardingCompleted.value = onboarded
                 }
+                var pods = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
+                val rememberedMac = context.getSharedPreferences("pod", Context.MODE_PRIVATE)
+                    .getString("pod_mac", null)
+                if (rememberedMac != null && pods.none { it.mac == rememberedMac }) {
+                    pods = pods + SavedPod(rememberedMac, "My Bike", BikeModel.METEOR_350)
+                    persistSavedPods(pods)
+                }
+                _savedPods.value = pods
+                val storedActive = p[stringPreferencesKey(KEY_ACTIVE_BIKE_MAC)]
+                activeBikeMac.value = storedActive ?: rememberedMac ?: pods.firstOrNull()?.mac
+                val onboarded = p[booleanPreferencesKey(KEY_ONBOARDING_COMPLETED)] ?: false
+                onboardingCompleted.value = onboarded
             }
         }
     }
@@ -166,11 +172,15 @@ object Session {
 
     private val _liveRide = MutableStateFlow(LiveRide())
     val liveRide: StateFlow<LiveRide> = _liveRide
+
+    /** A location fix actually arrived; distance/speed are real, not just zero. */
+    val hasFix = MutableStateFlow(false)
     private var lastLiveLoc: Location? = null
 
     fun updateLiveLocation(location: Location) {
         lastLat = location.latitude
         lastLon = location.longitude
+        hasFix.value = true
         // Trip timer runs while a route is live — with or without the Pod.
         // A BLE drop mid-ride pauses nothing: the Pod merely loses its screen feed.
         if (!navActive.value) {
@@ -205,6 +215,7 @@ object Session {
 
     fun resetLiveRide() {
         lastLiveLoc = null
+        hasFix.value = false
         _liveRide.value = LiveRide()
     }
 
@@ -221,6 +232,7 @@ object Session {
     }
 
     fun updateSettings(f: (Settings) -> Settings) {
+        settingsTouched = true
         val next = f(_settings.value)
         _settings.value = next
         if (themeMode.value != next.themeMode) themeMode.value = next.themeMode

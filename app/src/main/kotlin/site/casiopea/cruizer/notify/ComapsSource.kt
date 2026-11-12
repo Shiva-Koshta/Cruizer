@@ -137,7 +137,8 @@ object ComapsSource {
                     val update = row?.let { turnUpdate(it.car, it.ped, it.distToTurn, it.distToTarget, it.timeSeconds, it.exitNum) }
                     when {
                         update != null -> {
-                            Session.navActive.value = true
+                            // Arrival must stop the ride, like the other two sources.
+                            Session.navActive.value = !update.ended
                             Session.lastNavSource.value = pkg
                             Session.postTurn(update)
                             owned = true

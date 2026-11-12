@@ -11,8 +11,8 @@ android {
         applicationId = "site.casiopea.cruizer"
         minSdk = 31
         targetSdk = 37
-        versionCode = 40
-        versionName = "0.5.11"
+        versionCode = 41
+        versionName = "0.5.12"
     }
 
     buildTypes {

@@ -69,7 +69,6 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import android.Manifest
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -89,8 +88,8 @@ import kotlin.math.sin
  */
 @Composable
 fun LiveTripCard(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
     val liveRide by Session.liveRide.collectAsState()
+    val hasFix by Session.hasFix.collectAsState()
     val turn by Session.currentTurn.collectAsState()
     val podScreen by Session.podScreen.collectAsState()
     val settings by Session.settings.collectAsState()
@@ -141,8 +140,7 @@ fun LiveTripCard(modifier: Modifier = Modifier) {
                 ride = liveRide,
                 settings = settings,
                 bike = bike,
-                hasGps = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
-                    android.content.pm.PackageManager.PERMISSION_GRANTED,
+                hasFix = hasFix,
             )
         }
     }
@@ -366,7 +364,7 @@ private fun LiveRideMetricsSection(
     ride: Session.LiveRide,
     settings: Session.Settings,
     bike: Session.SavedPod?,
-    hasGps: Boolean,
+    hasFix: Boolean,
 ) {
     // 1 s tick so the duration advances during a ride even with GPS off
     // (elapsed is derived from startedAt, not from GPS callbacks).
@@ -380,7 +378,7 @@ private fun LiveRideMetricsSection(
         }
     }
     val elapsedSec = ride.startedAt?.let { nowMs - it }?.div(1000)?.coerceAtLeast(0) ?: 0L
-    val noFix = !hasGps
+    val noFix = !hasFix || !ride.isActive
     val distStr = if (noFix) "—" else if (!settings.imperial) {
         "%.1f km".format(Locale.US, ride.distanceM / 1000f)
     } else {
@@ -436,23 +434,6 @@ private fun MetricTile(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
         Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun MetricChip(label: String, value: String) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-        }
     }
 }
 
@@ -716,9 +697,4 @@ private fun formatDuration(seconds: Long): String {
     val m = (seconds % 3600) / 60
     val s = seconds % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
-}
-
-private fun formatClock(secondsFromNow: Int): String {
-    val t = java.time.LocalTime.now().plusSeconds(secondsFromNow.toLong())
-    return "%02d:%02d".format(t.hour, t.minute)
 }

@@ -3,11 +3,29 @@ package site.casiopea.cruizer
 import site.casiopea.cruizer.notify.GoogleMapsIconMatcher
 import site.casiopea.cruizer.proto.TurnKind
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class GoogleMapsIconMatcherTest {
+
+    @Test
+    fun everyTemplateMatchesItsOwnKind() {
+        // Catches a template pasted under the wrong kind or duplicated across kinds.
+        GoogleMapsIconMatcher.TEMPLATES.forEach { t ->
+            assertEquals(t.kind, GoogleMapsIconMatcher.matchPack(t.bits))
+        }
+    }
+
+    @Test
+    fun thresholdIsExclusiveAt32Bits() {
+        val t = GoogleMapsIconMatcher.TEMPLATES.first { it.kind == TurnKind.LEFT }
+        fun flip(n: Int) = t.bits.clone().also { b ->
+            repeat(n) { i -> b[i / 32] = b[i / 32] xor (1 shl (i % 32)) }
+        }
+        assertEquals(TurnKind.LEFT, GoogleMapsIconMatcher.matchPack(flip(31)))
+        assertNotEquals(TurnKind.LEFT, GoogleMapsIconMatcher.matchPack(flip(32)))
+    }
 
     @Test
     fun matchesKnownTemplatesExactly() {

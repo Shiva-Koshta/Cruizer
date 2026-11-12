@@ -39,7 +39,8 @@ BLE with turn-by-turn data parsed from nav apps. One rider, one phone.
   between nav start and the first instruction.
 - `ComapsSource` — CoMaps' structured `content://<flavour>.provider.navigation/live` provider
   (needs a custom runtime permission, `<flavour>.permission.READ_NAVIGATION_DATA`, requested in
-  onboarding). CoMaps must stay out of `TurnSource.NAV_PACKAGES`.
+  onboarding). CoMaps is provider-primary with a notification text fallback, so it does stay
+  in `TurnSource.NAV_PACKAGES`; `tryParse` ignores its notifications while the provider is granted.
 
 ## Debug & device quirks
 

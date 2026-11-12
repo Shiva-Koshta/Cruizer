@@ -134,30 +134,63 @@ object PodProtocol {
         else -> "$value ft"
     }
 
-    /** Human text for the Pod's bottom line, matching the bytes [navFrame] sends. */
-    fun bottomLabel(bottom: Bottom, now: Long): String? = when (bottom) {
-        is Bottom.Arrival -> {
-            val cal = java.util.Calendar.getInstance().apply {
-                timeInMillis = now
-                add(java.util.Calendar.SECOND, bottom.secondsFromNow)
+    /** Human text for the Pod's bottom line, decoded from the bytes [navFrame] sends. */
+    fun bottomLabel(bottom: Bottom, now: Long): String? {
+        if (bottom === Bottom.None) return null
+        val b = encodeBottom(bottom, now)
+        val hi = b[0].toInt() and 0xFF
+        val lo = b[1].toInt() and 0xFF
+        return when (bottom) {
+            is Bottom.Arrival -> {
+                val fmt = hi shr 6
+                val h = hi and 0x3F
+                if (fmt == 0) "%02d:%02d".format(java.util.Locale.US, h, lo)
+                else "%d:%02d %s".format(java.util.Locale.US, h, lo, if (fmt == 1) "AM" else "PM")
             }
-            val h24 = cal.get(java.util.Calendar.HOUR_OF_DAY)
-            val m = cal.get(java.util.Calendar.MINUTE)
-            if (!bottom.is12hFormat) {
-                "%02d:%02d".format(java.util.Locale.US, h24, m)
-            } else {
-                "%d:%02d %s".format(
-                    java.util.Locale.US,
-                    if (h24 % 12 == 0) 12 else h24 % 12,
-                    m,
-                    if (h24 < 12) "AM" else "PM",
-                )
+            is Bottom.Remaining -> "%d:%02d".format(java.util.Locale.US, hi, lo)
+            is Bottom.Total -> distanceLabel((hi shl 8) or lo, b[2].toInt() and 0xFF)
+            Bottom.None -> null
+        }
+    }
+
+    /**
+     * The three bottom-line payload bytes ([11], [12], [13]). One encoder for the
+     * frame and the UI mirror, so the two cannot drift.
+     */
+    private fun encodeBottom(bottom: Bottom, now: Long): ByteArray {
+        val p = ByteArray(3)
+        when (bottom) {
+            is Bottom.Arrival -> {
+                val cal = java.util.Calendar.getInstance().apply {
+                    timeInMillis = now
+                    add(java.util.Calendar.SECOND, bottom.secondsFromNow)
+                }
+                val h24 = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                val (fmt, hourPart) =
+                    if (!bottom.is12hFormat) 0 to h24
+                    else (if (h24 < 12) 0x01 else 0x02) to (if (h24 % 12 == 0) 12 else h24 % 12)
+                p[0] = ((fmt shl 6) or (hourPart and 0x3F)).toByte()
+                p[1] = cal.get(java.util.Calendar.MINUTE).toByte()
+            }
+            is Bottom.Remaining -> {
+                // The verified layout has no "time remaining" format (wazetripper's
+                // fmt 10/20 doesn't fit the byte); render it as a clock-style h:mm
+                // with etaFormat 0. Hours cap at 63 (6 bits) — past that (2.6 days)
+                // the caller should fall back to distance.
+                p[0] = ((bottom.seconds / 3600).coerceAtMost(63) and 0x3F).toByte()
+                p[1] = (bottom.seconds % 3600 / 60).toByte()
+            }
+            is Bottom.Total -> {
+                val (v, u) = encodeDistance(bottom.meters, bottom.imperial)
+                p[0] = ((v shr 8) and 0xFF).toByte()
+                p[1] = (v and 0xFF).toByte()
+                p[2] = u.toByte() // distance mode: any non-zero [13]
+            }
+            Bottom.None -> {
+                p[0] = 0xFF.toByte(); p[1] = 0xFF.toByte(); p[2] = 0xFF.toByte()
             }
         }
-        is Bottom.Remaining ->
-            "%d:%02d".format(java.util.Locale.US, (bottom.seconds / 3600).coerceAtMost(63), bottom.seconds % 3600 / 60)
-        is Bottom.Total -> encodeDistance(bottom.meters, bottom.imperial).let { distanceLabel(it[0], it[1]) }
-        Bottom.None -> null
+        return p
     }
 
     fun podScreen(
@@ -186,6 +219,7 @@ object PodProtocol {
         night: Boolean,
         exit: Int = 0,
         intensityOverride: Int? = null,
+        now: Long = System.currentTimeMillis(),
     ): ByteArray {
         val (val0, unit0) = encodeDistance(distanceM, imperial).let { it[0] to it[1] }
         val intensity = intensityOverride ?: intensity(distanceM, maneuver)
@@ -211,41 +245,10 @@ object PodProtocol {
                 or (if (exit > 0) 2 else 1)).toByte()
         }
 
-        when (val b = bottom) {
-            is Bottom.Arrival -> {
-                val cal = java.util.Calendar.getInstance().apply {
-                    add(java.util.Calendar.SECOND, b.secondsFromNow)
-                }
-                val h24 = cal.get(java.util.Calendar.HOUR_OF_DAY)
-                val m = cal.get(java.util.Calendar.MINUTE)
-                val (fmt, hourPart) =
-                    if (!bottom.is12hFormat) 0x00 to h24
-                    else (if (h24 < 12) 0x01 else 0x02) to (if (h24 % 12 == 0) 12 else h24 % 12)
-                p[11] = ((fmt shl 6) or (hourPart and 0x3F)).toByte()
-                p[12] = m.toByte()
-                p[13] = 0 // mode 0 = time display
-            }
-            is Bottom.Remaining -> {
-                // The verified layout has no "time remaining" format (wazetripper's
-                // fmt 10/20 doesn't fit the byte); we render remaining time as a
-                // clock-style h:mm with etaFormat 0. Hours cap at 63 (6 bits) —
-                // past that (2.6 days) the caller should fall back to distance.
-                val h = (b.seconds / 3600).coerceAtMost(63)
-                val mm = b.seconds % 3600 / 60
-                p[11] = (h and 0x3F).toByte()
-                p[12] = mm.toByte()
-                p[13] = 0
-            }
-            is Bottom.Total -> {
-                val (v, u) = encodeDistance(b.meters, b.imperial)
-                p[11] = ((v shr 8) and 0xFF).toByte()
-                p[12] = (v and 0xFF).toByte()
-                p[13] = u.toByte() // distance mode: any non-zero [13]
-            }
-            Bottom.None -> {
-                p[11] = 0xFF.toByte(); p[12] = 0xFF.toByte(); p[13] = 0xFF.toByte()
-            }
-        }
+        val b = encodeBottom(bottom, now)
+        p[11] = b[0]
+        p[12] = b[1]
+        p[13] = b[2]
         return withCrc(p)
     }
 
@@ -254,17 +257,6 @@ object PodProtocol {
         body(p)
         return p
     }
-
-    /** Idle/informational screens that reuse the nav frame with no data (low battery 0x44, no-data 0x42, re-route 0x1C). */
-    fun idleFrame(icon: Int, night: Boolean): ByteArray = withCrc(
-        build18 {
-            it[0] = 0x10; it[1] = 0x11
-            it[2] = icon.toByte()
-            it[5] = 0x01
-            it[6] = (if (night) 1 else 0).toByte()
-            it[7] = 0xFF.toByte()
-        }
-    )
 
     /** Status overlay screens: route started (0x45), low battery (0x44), re-routing (0x1C). */
     fun statusFrame(icon: Icons, night: Boolean): ByteArray = withCrc(
@@ -280,6 +272,4 @@ object PodProtocol {
     )
 
     fun routeStartedFrame(night: Boolean): ByteArray = statusFrame(Icons.ROUTE_STARTED, night)
-    fun lowBatteryFrame(night: Boolean): ByteArray = statusFrame(Icons.LOW_BATTERY, night)
-    fun reRouteFrame(night: Boolean): ByteArray = statusFrame(Icons.RE_ROUTE, night)
 }

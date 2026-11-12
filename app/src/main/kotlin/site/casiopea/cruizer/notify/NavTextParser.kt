@@ -24,9 +24,6 @@ object NavTextParser {
     private val EXIT =
         Regex("""(?:take\s+the\s+)?(\d+)(?:st|nd|rd|th)\s+exit|exit\s+(\d+)""", RegexOption.IGNORE_CASE)
 
-    private val CAMERA =
-        Regex("""speed camera|fixed camera|average speed|radar""", RegexOption.IGNORE_CASE)
-
     private val ARRIVAL =
         Regex("""arriv\w*\D*(\d{1,2}:\d{2})\s*(AM|PM)?""", RegexOption.IGNORE_CASE)
 
@@ -80,10 +77,9 @@ object NavTextParser {
         TurnKind.STRAIGHT to listOf("continue", "straight", "follow the road"),
     )
 
-    /** Enum kind result of parsing: a turn, a camera alert (m in 1..300), or nothing actionable. */
+    /** Result of parsing: a turn, or nothing actionable. */
     sealed interface Parsed {
         data class Turn(val update: TurnUpdate) : Parsed
-        data class Camera(val meters: Int?) : Parsed
         data object Idle : Parsed // no actionable content (e.g. Maps' "Guiding to …")
     }
 
@@ -95,12 +91,6 @@ object NavTextParser {
         // before the first instruction — neither is actionable.
         if (lower.contains("guiding to") && !DISTANCE.containsMatchIn(lower)) return Parsed.Idle
         if (lower.contains("starting navigation")) return Parsed.Idle
-
-        if (CAMERA.containsMatchIn(lower)) {
-            // Cameras arrive as separate/updated notifications; report once and stay silent.
-            val d = DISTANCE.find(lower)?.let(::toMeters)?.takeIf { it in 1..300 }
-            return Parsed.Camera(d)
-        }
 
         if (ARRIVED.containsMatchIn(lower)) {
             return Parsed.Turn(TurnUpdate(TurnKind.DESTINATION, null, ended = true))
@@ -180,10 +170,14 @@ object NavTextParser {
         if (amPm.equals("AM", true) && hour == 12) hour = 0
         var delta = (hour - now.get(Calendar.HOUR_OF_DAY)) * 60 +
             (minute - now.get(Calendar.MINUTE))
-        if (amPm == null && delta < 0 && hour <= 12) {
-            delta += 12 * 60
+        if (amPm == null) {
+            // Bare clock: take the nearest future time. Adding a fixed 12 h
+            // turned "1:00" at 23:00 into 14 h away, so the 10 h cap dropped
+            // every ETA on a ride that crosses midnight.
+            if (delta < -720) delta += 24 * 60 else if (delta < 0) delta += 12 * 60
+        } else if (delta < 0) {
+            delta += 24 * 60
         }
-        if (delta < 0) delta += 24 * 60
         return delta.takeIf { it in 0..600 }?.times(60)
     }
 
