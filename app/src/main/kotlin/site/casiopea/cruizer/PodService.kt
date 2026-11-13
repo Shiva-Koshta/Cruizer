@@ -64,8 +64,11 @@ class PodService : Service() {
     private var telephonyCallback: TelephonyCallback? = null
     private var lastFrameSentAt = 0L
     private var lastManeuver: Int? = null
+    private var lastDistanceM: Int? = null
     private var sentSplash = false
     private var liveLocationOn = false
+    private var foregroundType = 0
+    private var foregroundText = "Cruiser is starting…"
 
     /** No binding: the UI talks to the service through [Session] only. */
     override fun onBind(intent: Intent?): IBinder? = null
@@ -73,7 +76,7 @@ class PodService : Service() {
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.DEBUG) Log.i("CruizerNav", "service started")
-        startAsForeground("Cruiser is starting…")
+        if (!startAsForeground("Cruiser is starting…")) return
         Session.init(this)
         link = PodLink(this)
         link.watchAdapterState() // BT off/on cycles (GrapheneOS) kill the GATT server — track it
@@ -206,6 +209,7 @@ class PodService : Service() {
                 // The recorded trip survives: BLE drops mid-ride must not erase the ride.
                 lastFrameSentAt = 0
                 sentSplash = false
+                lastDistanceM = null
                 Session.podScreen.value = null
                 awaitPin(false)
             }
@@ -304,14 +308,18 @@ class PodService : Service() {
     }
 
     fun forgetPod(mac: String? = null) {
-        val target = mac ?: link.deviceAddress.value
-        if (target != null) {
-            Session.removeSavedPod(target)
-        }
-        getSharedPreferences("pod", Context.MODE_PRIVATE).edit().clear().apply()
+        val target = mac ?: link.deviceAddress.value ?: return
+        val prefs = getSharedPreferences("pod", Context.MODE_PRIVATE)
+        // Capture before removeSavedPod clears the same memory.
+        val wasRemembered = prefs.getString(KEY_MAC, null) == target
+        Session.removeSavedPod(target)
+        if (!wasRemembered) return // deleting a bike we are not paired with: leave the link alone
+        prefs.edit().clear().apply()
         link.deviceAddress.value = null
         if (bleReady()) link.disconnect()
-        link.scanOrConnect(bleReady())
+        // Stop instead of re-scanning: the rider just asked us to forget the Pod,
+        // and a scan here finds it again and re-adds it. Connect starts a new scan.
+        stopSelf()
     }
 
     private fun awaitPin(on: Boolean) {
@@ -399,7 +407,14 @@ class PodService : Service() {
             else -> lastManeuver ?: Icons.STRAIGHT.code
         }
         if (maneuver < 0) return // unmappable instruction: re-send keeps the last icon (RE behavior)
+        // Unknown distance: keep refreshing the same maneuver (bottom line ticks) but
+        // never invent one — 0 m is the Pod's "turn now" bucket. A new maneuver with
+        // no distance holds the previous frame instead.
+        val distance = turn.distanceM
+            ?: lastDistanceM?.takeIf { maneuver == lastManeuver }
+            ?: return
         lastManeuver = maneuver
+        lastDistanceM = distance
         val bottom = when (s.bottomMode) {
             Session.BottomMode.ARRIVAL -> eta(turn)
                 ?.let { PodProtocol.Bottom.Arrival(it, s.is12Hour) }
@@ -419,7 +434,7 @@ class PodService : Service() {
         } ?: PodProtocol.Bottom.None
         val f = PodProtocol.navFrame(
             maneuver = maneuver,
-            distanceM = turn.distanceM ?: 0,
+            distanceM = distance,
             imperial = s.imperial,
             next = turn.next?.nextCode()?.takeIf { it >= 0 },
             nextDistanceM = turn.nextDistanceM,
@@ -430,7 +445,7 @@ class PodService : Service() {
         )
         link.send(f)
         Session.podScreen.value =
-            PodProtocol.podScreen(maneuver, turn.distanceM ?: 0, s.imperial, bottom, night, now)
+            PodProtocol.podScreen(maneuver, distance, s.imperial, bottom, night, now)
         if (BuildConfig.DEBUG) Log.i("CruizerNav", "nav frame: " + f.joinToString(" ") { "%02X".format(it) })
         lastFrameSentAt = now
     }
@@ -475,6 +490,9 @@ class PodService : Service() {
     private fun startLiveLocation() {
         if (liveLocationOn) return
         if (!hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)) return
+        // The service may have started before location was granted: re-declare the
+        // foreground type, or the platform rejects location updates in the background.
+        if (foregroundType and FOREGROUND_SERVICE_TYPE_LOCATION == 0) startAsForeground(foregroundText)
         val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val provider = when {
             lm.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
@@ -562,7 +580,9 @@ class PodService : Service() {
             if (Session.savedPods.value.none { it.mac == mac }) {
                 Session.savePod(mac, "My Bike")
             }
-            Session.selectBike(mac)
+            // Last connected is not the same as the rider's chosen bike: only seed
+            // the selection when they have not picked one.
+            if (Session.activeBikeMac.value == null) Session.selectBike(mac)
         }
     }
 
@@ -575,7 +595,8 @@ class PodService : Service() {
             )
     }
 
-    private fun startAsForeground(text: String) {
+    private fun startAsForeground(text: String): Boolean {
+        foregroundText = text
         channel()
         val stopIntent = PendingIntent.getService(
             this,
@@ -602,14 +623,17 @@ class PodService : Service() {
         val withLocation = hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)
         if (!withConnectedDevice) {
             stopSelf()
-            return
+            return false
         }
         val type = FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
             (if (withLocation) FOREGROUND_SERVICE_TYPE_LOCATION else 0)
-        try {
+        return try {
             startForeground(NOTIF_ID, n, type)
+            foregroundType = type
+            true
         } catch (_: Exception) {
             stopSelf()
+            false
         }
     }
 

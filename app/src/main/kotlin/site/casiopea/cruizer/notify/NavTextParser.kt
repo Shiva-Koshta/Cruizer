@@ -17,7 +17,8 @@ import kotlin.math.roundToInt
 object NavTextParser {
 
     private val DISTANCE = Regex(
-        """(?:in\s+)?(\d+(?:[.,]\d+)?)\s*(m\b|km\b|ft\b|feet\b|mi\b|miles?\b|yd\b)""",
+        // Negative lookahead: "52 km/h" is a speed, not a distance to the turn.
+        """(?:in\s+)?(\d+(?:[.,]\d+)?)\s*(m\b|km\b|ft\b|feet\b|mi\b|miles?\b|yd\b)(?!\s*/\s*h)""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -25,7 +26,9 @@ object NavTextParser {
         Regex("""(?:take\s+the\s+)?(\d+)(?:st|nd|rd|th)\s+exit|exit\s+(\d+)""", RegexOption.IGNORE_CASE)
 
     private val ARRIVAL =
-        Regex("""arriv\w*\D*(\d{1,2}:\d{2})\s*(AM|PM)?""", RegexOption.IGNORE_CASE)
+        // The gap must stay on one line: "arrive at destination\n10:20" is the arrival
+        // instruction plus an ETA, not a phrase to scrub — deleting it lost the maneuver.
+        Regex("""arriv\w*[^\d\n]{0,12}(\d{1,2}:\d{2})\s*(AM|PM)?""", RegexOption.IGNORE_CASE)
 
     private val REMAINING_MIN =
         Regex("""(\d+)\s*(?:h|hr|hour)[s]?\s*(\d+)\s*min""", RegexOption.IGNORE_CASE)
@@ -104,8 +107,10 @@ object NavTextParser {
         val mapsBottom = maps3 ?: MAPS_BOTTOM.find(lower)
         // The bottom line's route distance must never become the distance to the
         // turn: a distance-less instruction ("Turn right onto MG Road") would
-        // otherwise show 4.6 km for a turn 50 m away.
-        val instruction = lower.substring(0, mapsBottom?.range?.first ?: lower.length)
+        // otherwise show 4.6 km for a turn 50 m away. Blank only the matched range
+        // so an instruction posted *after* the bottom line is still parsed.
+        val instruction = if (mapsBottom == null) lower
+        else lower.replaceRange(mapsBottom.range, " ")
         val distance = DISTANCE.find(instruction)?.let(::toMeters)
         // "Arrived" still means no distance anywhere in the body.
         val anyDistance = DISTANCE.find(lower)?.let(::toMeters)
@@ -157,7 +162,7 @@ object NavTextParser {
         }
     }
 
-    /** "arriving at 4:10 PM" or "11:55 ETA" clock -> seconds from now (capped at 10 h). */
+    /** "arriving at 4:10 PM" or "11:55 ETA" clock -> seconds from now (capped at 24 h). */
     fun etaSeconds(lower: String, now: Calendar = Calendar.getInstance()): Int? {
         ARRIVAL.find(lower)?.let { m ->
             return etaSecondsFromClock(m.groupValues[1], m.groupValues[2].takeIf { it.isNotEmpty() }, now)
@@ -176,15 +181,11 @@ object NavTextParser {
         if (amPm.equals("AM", true) && hour == 12) hour = 0
         var delta = (hour - now.get(Calendar.HOUR_OF_DAY)) * 60 +
             (minute - now.get(Calendar.MINUTE))
-        if (amPm == null) {
-            // Bare clock: take the nearest future time. Adding a fixed 12 h
-            // turned "1:00" at 23:00 into 14 h away, so the 10 h cap dropped
-            // every ETA on a ride that crosses midnight.
-            if (delta < -720) delta += 24 * 60 else if (delta < 0) delta += 12 * 60
-        } else if (delta < 0) {
-            delta += 24 * 60
-        }
-        return delta.takeIf { it in 0..600 }?.times(60)
+        // A clock that has already passed is tomorrow's ETA. The old +12 h guess
+        // (for a 12-hour clock without AM/PM) reported 20:00 -> "15:00" as 7 h.
+        if (delta < 0) delta += 24 * 60
+        // Cap at a day, not at 10 h: a 1200 km ride has a 14 h ETA.
+        return delta.takeIf { it in 0..1440 }?.times(60)
     }
 
     private fun remainingSeconds(lower: String): Int? {

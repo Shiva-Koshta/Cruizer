@@ -22,8 +22,13 @@ object MapsScreenTextParser {
     /** One flattened window line with its vertical position (0 = top, 1 = bottom). */
     data class ScreenLine(val text: String, val y: Float = 0f)
 
-    /** Bottom bar sits below this fraction of the screen height; the instruction card above. */
-    private const val SUMMARY_TOP = 0.72f
+    /**
+     * The bottom bar carries a duration ("13 min", "1 h 20 min") or a clock; the
+     * instruction card does not. Matching by shape survives landscape and a maps
+     * build that moves the sheet, which a fixed screen fraction did not.
+     */
+    private val MANEUVER_WORD =
+        Regex("""\b(turn|keep|merge|exit|arrive|continue|roundabout|u-turn)\b""", RegexOption.IGNORE_CASE)
 
     /** Strings that only exist on Maps' live navigation screen, not while browsing. */
     private val NAV_CONTROLS = listOf("exit", "search along route", "mute")
@@ -49,8 +54,12 @@ object MapsScreenTextParser {
         if (clean.isEmpty()) return null
         if (!isNavigating(clean)) return null
 
-        val summary = clean.filter { it.y >= SUMMARY_TOP }.joinToString(", ") { it.text }
-        val instruction = clean.filter { it.y < SUMMARY_TOP }.joinToString("\n") { it.text }
+        // Summary = every line at or below the first line that carries a duration or
+        // a clock. Finding that anchor by shape (not by a screen fraction) survives
+        // landscape and a maps build that moves the sheet.
+        val summaryTop = clean.filter { isSummary(it.text) }.minOfOrNull { it.y } ?: Float.MAX_VALUE
+        val summary = clean.filter { it.y >= summaryTop }.joinToString(", ") { it.text }
+        val instruction = clean.filter { it.y < summaryTop }.joinToString("\n") { it.text }
 
         val parsed = NavTextParser.parse(instruction, now)
         val turn = (parsed as? NavTextParser.Parsed.Turn)?.update ?: TurnUpdate(TurnKind.UNKNOWN, null)
@@ -68,8 +77,26 @@ object MapsScreenTextParser {
      */
     fun isNavigating(lines: List<ScreenLine>): Boolean {
         val all = lines.joinToString("\n") { it.text }.lowercase()
-        return NAV_CONTROLS.count(all::contains) >= 2
+        val controls = NAV_CONTROLS.count(all::contains)
+        if (controls >= 2) return true
+        if (controls == 0) return false
+        // One control plus a maneuver line ("In 500 m", "Turn right in 300 m") over a
+        // duration summary: keeps the path alive when Maps renames a control, without
+        // treating a route preview (a bare "4.6 km · 13 min" card) as a live route.
+        val hasSummary = lines.any { isSummary(it.text) }
+        val hasTurn = lines.any {
+            !isSummary(it.text) && DISTANCE.containsMatchIn(it.text) &&
+                (MANEUVER_WORD.containsMatchIn(it.text) || IN_DISTANCE.containsMatchIn(it.text))
+        }
+        return hasSummary && hasTurn
     }
+
+    private val IN_DISTANCE = Regex("""\bin\s+\d""", RegexOption.IGNORE_CASE)
+
+    /** A line the bottom bar would print: a duration or a clock, not a maneuver. */
+    private fun isSummary(text: String): Boolean =
+        CLOCK.containsMatchIn(text) ||
+            (MINUTES.containsMatchIn(text) && !MANEUVER_WORD.containsMatchIn(text))
 
     /** Distance token from the bottom bar; the local regex rejects "52 km/h". */
     private fun summaryMeters(summary: String): Int? =

@@ -26,7 +26,6 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import site.casiopea.cruizer.proto.PodProtocol
 import java.util.UUID
-import java.util.concurrent.ConcurrentLinkedQueue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -48,7 +47,7 @@ class PodLink(private val context: Context) {
     private val cccd = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
     /** Frames waiting for a serialized write. */
-    val queue = ConcurrentLinkedQueue<ByteArray>()
+    private val queue = java.util.ArrayDeque<ByteArray>()
 
     private val _state = MutableStateFlow(LinkState.DISCONNECTED)
     val state: StateFlow<LinkState> = _state
@@ -99,12 +98,12 @@ class PodLink(private val context: Context) {
             char = c
             _state.value = LinkState.CONNECTED
             val d = c.getDescriptor(cccd)
-            if (d != null) {
-                g.setCharacteristicNotification(c, true)
+            val notified = runCatching { g.setCharacteristicNotification(c, true) }.getOrDefault(false)
+            if (d != null && notified) {
                 @Suppress("DEPRECATION")
                 d.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                 @Suppress("DEPRECATION")
-                g.writeDescriptor(d)
+                runCatching { g.writeDescriptor(d) }
             } else {
                 drain()
             }
@@ -119,16 +118,22 @@ class PodLink(private val context: Context) {
             if (client !== g) return
             // status is the only delivery signal there is: a rejected write is
             // otherwise indistinguishable from a delivered one. Re-queue it.
-            if (status != BluetoothGatt.GATT_SUCCESS) c.value?.let { queue.offer(it) }
+            // addFirst: a retried frame is older than anything queued behind it.
+            if (status != BluetoothGatt.GATT_SUCCESS) c.value?.let(::requeue)
             drain()
         }
 
-        // Legacy signature covers API 31/32 when running on newer compile SDK.
+        // Legacy signature: API 31/32 dispatch this one. API 33+ dispatch the
+        // value-carrying overload below, so it must exist or Pod replies vanish.
         @Deprecated("deprecated in Java")
         override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
-            if (client !== g) return
             val v = c.value ?: return
-            onCommand?.invoke(v)
+            onCharacteristicChanged(g, c, v)
+        }
+
+        override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray) {
+            if (client !== g) return
+            onCommand?.invoke(value)
         }
     }
 
@@ -167,6 +172,14 @@ class PodLink(private val context: Context) {
                 stopScan()
                 deviceAddress.value = result.device.address
                 connect(true, result.device.address)
+            }
+
+            // Without this a failed scan leaves scanCallback set, startScan() returns
+            // immediately forever, and the service can only wait for its timeout.
+            override fun onScanFailed(errorCode: Int) {
+                Log.i("CruizerNav", "BLE scan failed: $errorCode")
+                scanCallback = null
+                _state.value = LinkState.DISCONNECTED
             }
         }
         val settings = ScanSettings.Builder()
@@ -267,24 +280,31 @@ class PodLink(private val context: Context) {
     fun unwatchAdapterState() = context.unregisterReceiver(stateWatch)
 
     /** Offer a frame; written when the transport is idle. */
+    @Synchronized
     fun send(bytes: ByteArray) {
-        queue.offer(bytes)
+        queue.addLast(bytes)
         drain()
+    }
+
+    /** Re-queue a rejected frame ahead of newer ones (BLE callback thread). */
+    @Synchronized
+    private fun requeue(bytes: ByteArray) {
+        queue.addFirst(bytes)
     }
 
     @Synchronized
     private fun drain() {
         val c = char ?: return
         // Peek so a BT-down window can't consume the frame from the queue.
-        val b = queue.peek() ?: return
+        val b = queue.peekFirst() ?: return
         c.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
         @Suppress("DEPRECATION")
         c.value = b
-        @Suppress("DEPRECATION")
-        val ok = client?.writeCharacteristic(c)
+        // Adapter off / permission revoked mid-write throws: keep the frame queued.
+        val ok = runCatching { client?.writeCharacteristic(c) }.getOrNull()
         // true = handed to the stack, not delivered; a failure re-queues the frame
         // from onCharacteristicWrite.
-        if (ok == true) queue.poll() else if (ok == false) Log.i("CruizerNav", "BLE write rejected")
+        if (ok == true) queue.pollFirst() else if (ok == false) Log.i("CruizerNav", "BLE write rejected")
     }
 
     fun disconnect() {

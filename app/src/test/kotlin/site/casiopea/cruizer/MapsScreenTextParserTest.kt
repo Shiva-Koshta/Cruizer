@@ -101,4 +101,40 @@ class MapsScreenTextParserTest {
         assertEquals(500, u.distanceM)
         assertEquals(13 * 60, u.remainingSeconds)
     }
+
+    @Test
+    fun landscapeSummaryIsFoundByShapeNotByScreenFraction() {
+        // Side sheet in landscape: the summary sits mid-screen, above the fixed 0.72
+        // cut the parser used to make, and its 4.6 km must stay the route distance.
+        val u = turn(
+            at(0.1f, "In 500 m", "Turn right onto Market St") +
+                at(0.5f, "4.6 km", "13 min", "Exit", "Mute"),
+        )
+        assertEquals(TurnKind.RIGHT, u.kind)
+        assertEquals(500, u.distanceM)
+        assertEquals(4600, u.routeRemainingM)
+        assertEquals(13 * 60, u.remainingSeconds)
+    }
+
+    @Test
+    fun oneControlPlusAnInstructionCardStillCountsAsNavigating() {
+        // Maps renamed its controls down to one recognised string: the card shape
+        // must keep the screen feed alive instead of silently dying.
+        val u = turn(
+            at(0.05f, "In 500 m", "Turn right") +
+                at(0.9f, "13 min", "4.6 km", "Search along route"),
+        )
+        assertEquals(TurnKind.RIGHT, u.kind)
+        assertEquals(500, u.distanceM)
+    }
+
+    @Test
+    fun routePreviewIsStillIgnored() {
+        // Preview card ("4.6 km · 13 min") plus a stray labelled control is not a live route.
+        assertNull(
+            MapsScreenTextParser.extract(
+                at(0.1f, "4.6 km", "13 min", "Exit navigation") + at(0.9f, "123 Main St"),
+            ),
+        )
+    }
 }

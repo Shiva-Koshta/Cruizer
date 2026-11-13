@@ -196,4 +196,38 @@ class NavTextParserTest {
         assertEquals(12_000, p.update.routeRemainingM)
         assertEquals(60 * 60, p.update.arrivalSecondsFromNow)
     }
+
+    @Test
+    fun arriveInstructionKeepsItsManeuverWhenAnEtaLineFollows() {
+        // The ETA scrubber used to span newlines, deleting "arrive at destination"
+        // along with the clock, so the last turn of the ride parsed as UNKNOWN.
+        val p = NavTextParser.parse("In 200 m, arrive at destination\n10:20", now(10, 0)) as Parsed.Turn
+        assertEquals(TurnKind.DESTINATION, p.update.kind)
+        assertEquals(200, p.update.distanceM)
+        assertFalse(p.update.ended) // still 200 m to go
+    }
+
+    @Test
+    fun etaHoursAwayIsKept() {
+        // A 1200 km leg has a 14.5 h ETA; the old 10 h cap blanked the arrival line.
+        val p = NavTextParser.parse("Turn right\n24 min · 12 km · 22:30", now(8, 0)) as Parsed.Turn
+        assertEquals(14 * 3600 + 30 * 60, p.update.arrivalSecondsFromNow)
+    }
+
+    @Test
+    fun instructionAfterTheBottomLineStillParses() {
+        // Some posts put the summary first; cutting the body at the bottom line
+        // threw the maneuver away.
+        val p = NavTextParser.parse("13 min · 4.6 km · 11:55\nTurn right onto MG Road", now(11, 0)) as Parsed.Turn
+        assertEquals(TurnKind.RIGHT, p.update.kind)
+        assertNull(p.update.distanceM)
+        assertEquals(4600, p.update.routeRemainingM)
+    }
+
+    @Test
+    fun speedIsNotTheTurnDistance() {
+        val p = NavTextParser.parse("Turn right onto Main St\n52 km/h") as Parsed.Turn
+        assertEquals(TurnKind.RIGHT, p.update.kind)
+        assertNull(p.update.distanceM)
+    }
 }

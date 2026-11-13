@@ -51,8 +51,6 @@ object ComapsSource {
     fun permissions(context: Context): List<String> =
         installed(context).filter { !granted(context, it) }.map { it + PERMISSION_SUFFIX }
 
-    fun permission(pkg: String) = pkg + PERMISSION_SUFFIX
-
     private var registered = false
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -61,36 +59,31 @@ object ComapsSource {
         if (registered) return
         val app = context.applicationContext
         appContext = app
-        scope.launch {
-            if (registered) return@launch
-            val flavors = installed(app).filter { granted(app, it) }
-            if (flavors.isEmpty()) return@launch
-            var ok = 0
-            flavors.forEach { pkg ->
-                try {
-                    app.contentResolver.registerContentObserver(
-                        Uri.parse("content://$pkg$AUTHORITY_SUFFIX/live"),
-                        false,
-                        observer,
-                    )
-                    ok++
-                } catch (_: Exception) {
-                }
-            }
-            if (ok > 0) {
-                registered = true
-                observer.query(app) // surface a session already in progress
+        var ok = 0
+        installed(app).filter { granted(app, it) }.forEach { pkg ->
+            runCatching {
+                app.contentResolver.registerContentObserver(
+                    Uri.parse("content://$pkg$AUTHORITY_SUFFIX/live"),
+                    false,
+                    observer,
+                )
+                ok++
             }
         }
+        if (ok == 0) return
+        registered = true
+        // Registration stays synchronous (stop() must see it), but the provider query
+        // is a binder call: never run it on the caller's main thread.
+        scope.launch { observer.query(app) } // surface a session already in progress
     }
 
     fun stop(context: Context) {
         if (!registered) return
+        registered = false
         try {
             context.applicationContext.contentResolver.unregisterContentObserver(observer)
         } catch (_: Exception) {
         }
-        registered = false
         observer.dropOwnTurn()
     }
 
@@ -101,7 +94,7 @@ object ComapsSource {
     private class Observer(private val handler: Handler) : ContentObserver(handler) {
         private var pending = false
         private var lastQueryAt = 0L
-        private var owned = false // whether the last posted turn came from CoMaps
+        private var ownedPkg: String? = null // package whose turn is currently on the Pod
 
         override fun onChange(selfChange: Boolean) {
             val ctx = appContext ?: return
@@ -134,25 +127,29 @@ object ComapsSource {
                             exitNum = c.intOrNull("exit_num"),
                         )
                     }
-                    val update = row?.let { turnUpdate(it.car, it.ped, it.distToTurn, it.distToTarget, it.timeSeconds, it.exitNum) }
-                    when {
-                        update != null -> {
-                            // Arrival must stop the ride, like the other two sources.
-                            Session.beginRoute(pkg, ended = update.ended)
-                            Session.postTurn(update)
-                            owned = true
-                        }
-                        owned -> {
-                            // empty cursor = navigation ended; clear only our own turn
-                            Session.endRoute(pkg)
-                            owned = false
-                        }
+                    val update = row?.let {
+                        turnUpdate(it.car, it.ped, it.distToTurn, it.distToTarget, it.timeSeconds, it.exitNum)
                     }
+                    if (row == null) {
+                        // Only an empty row means CoMaps stopped navigating. An
+                        // unmappable direction enum is still a live route: treating
+                        // it as "ended" tore the ride down mid-leg.
+                        if (ownedPkg == pkg) {
+                            Session.endRoute(pkg)
+                            ownedPkg = null
+                        }
+                        return@launch
+                    }
+                    if (update == null) return@launch // unknown enum: keep the last turn
+                    // Arrival must stop the ride, like the other two sources.
+                    Session.beginRoute(pkg, ended = update.ended)
+                    Session.postTurn(update)
+                    ownedPkg = pkg
                 } catch (_: SecurityException) {
                     // rider revoked CoMaps permission mid-session; drop own turn safely
-                    if (owned) {
+                    if (ownedPkg == pkg) {
                         Session.endRoute(pkg)
-                        owned = false
+                        ownedPkg = null
                     }
                 } catch (_: Exception) {
                 }
@@ -160,11 +157,9 @@ object ComapsSource {
         }
 
         fun dropOwnTurn() {
-            if (owned) {
-                Session.navActive.value = false
-                Session.postTurn(null)
-            }
-            owned = false
+            // Go through the ownership check: the route may have moved to another app.
+            ownedPkg?.let(Session::endRoute)
+            ownedPkg = null
         }
     }
 
@@ -196,7 +191,7 @@ object ComapsSource {
         return TurnUpdate(
             kind = kind,
             distanceM = distToTurn?.let(NavTextParser::metersOf),
-            exit = if (kind == TurnKind.ROUNDABOUT) exitNum else null,
+            exit = if (kind == TurnKind.ROUNDABOUT) exitNum?.takeIf { it in 1..9 } else null,
             next = null,
             nextDistanceM = null,
             arrivalSecondsFromNow = timeSeconds,
@@ -208,6 +203,8 @@ object ComapsSource {
 
     /** car_direction enum -> TurnKind (CoMaps crashes out of routing mid-way otherwise). */
     private val CAR_KIND = mapOf(
+        // CoMaps' "no maneuver" value: the street continues, not an unknown icon.
+        "NO_TURN" to TurnKind.STRAIGHT,
         "GO_STRAIGHT" to TurnKind.STRAIGHT,
         "TURN_RIGHT" to TurnKind.RIGHT,
         "TURN_SHARP_RIGHT" to TurnKind.SHARP_RIGHT,

@@ -51,11 +51,17 @@ object Session {
     /** A settings change landed before the stored values finished loading. */
     @Volatile private var settingsTouched = false
 
+    /** A pod/onboarding change landed before the stored values finished loading. */
+    @Volatile private var stateTouched = false
+
+    @Volatile private var appContext: Context? = null
+
     /** Load stored settings once and keep persisting every change from now on. */
     fun init(context: Context) {
         if (initialized) return
         synchronized(this) {
             if (initialized) return
+            appContext = context.applicationContext
             store = context.applicationContext.cruiserStore
             initialized = true
             scope.launch {
@@ -83,18 +89,20 @@ object Session {
                         disconnectTimeoutMinutes = p[intPreferencesKey(KEY_DISCONNECT_TIMEOUT)] ?: 60,
                     )
                 }
-                var pods = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
-                val rememberedMac = context.getSharedPreferences("pod", Context.MODE_PRIVATE)
-                    .getString("pod_mac", null)
-                if (rememberedMac != null && pods.none { it.mac == rememberedMac }) {
-                    pods = pods + SavedPod(rememberedMac, "My Bike", BikeModel.METEOR_350)
-                    persistSavedPods(pods)
+                if (!stateTouched) {
+                    var pods = parseSavedPods(p[stringPreferencesKey(KEY_SAVED_PODS)])
+                    val rememberedMac = context.getSharedPreferences("pod", Context.MODE_PRIVATE)
+                        .getString("pod_mac", null)
+                    if (rememberedMac != null && pods.none { it.mac == rememberedMac }) {
+                        pods = pods + SavedPod(rememberedMac, "My Bike", BikeModel.METEOR_350)
+                        persistSavedPods(pods)
+                    }
+                    _savedPods.value = pods
+                    val storedActive = p[stringPreferencesKey(KEY_ACTIVE_BIKE_MAC)]
+                    activeBikeMac.value = storedActive ?: rememberedMac ?: pods.firstOrNull()?.mac
+                    onboardingCompleted.value =
+                        p[booleanPreferencesKey(KEY_ONBOARDING_COMPLETED)] ?: false
                 }
-                _savedPods.value = pods
-                val storedActive = p[stringPreferencesKey(KEY_ACTIVE_BIKE_MAC)]
-                activeBikeMac.value = storedActive ?: rememberedMac ?: pods.firstOrNull()?.mac
-                val onboarded = p[booleanPreferencesKey(KEY_ONBOARDING_COMPLETED)] ?: false
-                onboardingCompleted.value = onboarded
             }
         }
     }
@@ -222,6 +230,7 @@ object Session {
 
     fun resetLiveRide() {
         lastLiveLoc = null
+        hasFix.value = false // next ride must not show the previous ride's fixes as real
         _liveRide.value = LiveRide()
     }
 
@@ -264,6 +273,7 @@ object Session {
         customCc: Int = 350,
         customKmpl: Double = 36.5,
     ) {
+        stateTouched = true
         val sanitized = nickname.replace('|', '/').replace('\n', ' ').trim().ifEmpty { "Tripper Pod" }
         val current = _savedPods.value.filter { it.mac != mac }
         val updated = current + SavedPod(mac, sanitized, model, customCc, customKmpl)
@@ -275,6 +285,7 @@ object Session {
     }
 
     fun completeOnboarding() {
+        stateTouched = true
         onboardingCompleted.value = true
         scope.launch {
             store?.edit {
@@ -285,11 +296,13 @@ object Session {
 
     /** Re-show the permission/onboarding screen; persisting "done" stays untouched. */
     fun showOnboarding() {
+        stateTouched = true
         onboardingCompleted.value = false
     }
 
     fun selectBike(mac: String) {
         if (mac.isBlank()) return
+        stateTouched = true
         activeBikeMac.value = mac
         scope.launch {
             store?.edit {
@@ -299,13 +312,26 @@ object Session {
     }
 
     fun removeSavedPod(mac: String) {
+        stateTouched = true
         val updated = _savedPods.value.filter { it.mac != mac }
         _savedPods.value = updated
         persistSavedPods(updated)
+        // Drop the pairing memory too, or init() re-adds this bike on the next
+        // launch ("My Bike", Meteor 350) and the delete looks undone.
+        forgetRememberedMac(mac)
         if (activeBikeMac.value == mac) {
             val fallback = updated.firstOrNull()?.mac.orEmpty()
             if (fallback.isNotEmpty()) selectBike(fallback)
             else activeBikeMac.value = null
+        }
+    }
+
+    /** Clear SharedPreferences("pod") when it remembers the Pod being removed. */
+    private fun forgetRememberedMac(mac: String) {
+        val ctx = appContext ?: return
+        val prefs = ctx.getSharedPreferences("pod", Context.MODE_PRIVATE)
+        if (prefs.getString("pod_mac", null) == mac) {
+            prefs.edit().remove("pod_mac").remove("pod_paired").apply()
         }
     }
 
@@ -379,6 +405,9 @@ object Session {
     fun beginRoute(pkg: String, ended: Boolean = false) {
         lastNavSource.value = pkg
         navActive.value = !ended
+        // The ride clock follows the route, not the Pod: it must start even when
+        // the service (and therefore its collector) is not running.
+        if (!ended) ensureRideStarted()
     }
 
     /**
@@ -390,6 +419,7 @@ object Session {
         lastNavSource.value = null
         navActive.value = false
         postTurn(null)
+        resetLiveRide()
     }
 
     /** BLE link state, mirrored in by the Pod service for the UI. */

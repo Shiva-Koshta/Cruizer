@@ -73,6 +73,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -433,19 +437,25 @@ private fun MapsBanner() {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "🖥️ Google Maps is navigating — turn on live screen data for distance & ETA.",
+                "Google Maps is navigating — turn on live screen data for distance & ETA.",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = { MapsScreenSource.start(context) }) { Text("Enable") }
-            Text(
-                "✕",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            Box(
                 modifier = Modifier
-                    .clickable { dismissed.value = true }
-                    .padding(4.dp),
-            )
+                    .size(48.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .clickable(onClickLabel = "Dismiss banner") { dismissed.value = true }
+                    .semantics { contentDescription = "Dismiss banner"; role = Role.Button },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "✕",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
         }
     }
 }

@@ -60,4 +60,19 @@ class ComapsSourceTest {
     fun unknownDirectionIsNull() {
         assertNull(ComapsSource.turnUpdate("SOMETHING_NEW", null, "100 m", null, null, 0))
     }
+
+    @Test
+    fun noTurnIsStraightNotUnmapped() {
+        // A car_direction of NO_TURN is the street continuing; returning null made the
+        // caller treat the row as "navigation ended" and tear the ride down.
+        val u = ComapsSource.turnUpdate("NO_TURN", null, "40 m", "2 km", null, 0)!!
+        assertEquals(TurnKind.STRAIGHT, u.kind)
+        assertEquals(40, u.distanceM)
+    }
+
+    @Test
+    fun roundaboutExitZeroIsNoExit() {
+        // CoMaps sends 0 when it has no ordinal; the Pod must not announce "first exit".
+        assertNull(ComapsSource.turnUpdate("ENTER_ROUND_ABOUT", null, "300 m", null, null, 0)!!.exit)
+    }
 }

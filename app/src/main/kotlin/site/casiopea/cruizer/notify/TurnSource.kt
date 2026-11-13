@@ -52,9 +52,11 @@ class TurnSource : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         pendingClear?.let { handler.removeCallbacks(it); pendingClear = null }
-        // Losing notification access is global, but a provider-fed route may still
-        // be alive: end only the route this listener's source owns.
-        Session.lastNavSource.value?.let(Session::endRoute)
+        // Losing notification access is only fatal to a route fed by notifications:
+        // a provider-fed route (CoMaps) keeps running, so do not end it here.
+        val owner = Session.lastNavSource.value ?: return
+        val providerFed = ComapsSource.installed(this).any { it == owner && ComapsSource.granted(this, it) }
+        if (!providerFed) Session.endRoute(owner)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -67,9 +69,11 @@ class TurnSource : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         if (!isNavSource(sbn)) return
-        // Another nav app may still be giving instructions — reparse the
-        // remaining ones before declaring the route over.
-        val next = activeNotifications.filter { it.key != sbn.key }.firstOrNull(::isNavSource)
+        // Another *post from the same app* means its route is still alive; a stale
+        // notification from a different nav app must not restart navigation.
+        val next = activeNotifications
+            .filter { it.key != sbn.key && it.packageName == sbn.packageName }
+            .firstOrNull(::isNavSource)
         if (next != null) {
             pendingClear?.let { handler.removeCallbacks(it); pendingClear = null }
             tryParse(next)
@@ -102,9 +106,6 @@ class TurnSource : NotificationListenerService() {
                 return
             }
         }
-        // Any ongoing nav notification means a route is live, even if its text
-        // is still idle ("Guiding to…", "Starting navigation…").
-        Session.beginRoute(sbn.packageName)
         val e = sbn.notification.extras
         val title = e.getCharSequence("android.title")?.toString()?.trim().orEmpty()
         val bigText = e.getCharSequence("android.bigText")?.toString()?.trim().orEmpty()
@@ -134,7 +135,14 @@ class TurnSource : NotificationListenerService() {
                 }
                 Session.postTurn(update)
             }
-            NavTextParser.Parsed.Idle -> {}
+            NavTextParser.Parsed.Idle -> {
+                // Maps idles on "Guiding to…" before the first instruction: show the
+                // route-started icon then. Other ongoing notifications from a nav app
+                // (OsmAnd's always-on one) must not flip the Pod into route mode.
+                if (body.contains("guiding to", true) || body.contains("starting navigation", true)) {
+                    Session.beginRoute(sbn.packageName)
+                }
+            }
         }
     }
 

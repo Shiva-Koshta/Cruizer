@@ -29,6 +29,9 @@ class MapsScreenSource : AccessibilityService() {
         /** Grace before a Maps window with no nav controls ends the route. */
         private const val NAV_CLEAR_MS = 2000L
 
+        /** Lines kept from one window snapshot; the nav screen needs a handful. */
+        private const val MAX_LINES = 120
+
         fun start(context: Context) {
             context.startActivity(
                 Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
@@ -54,6 +57,9 @@ class MapsScreenSource : AccessibilityService() {
     private var navClear: Runnable? = null
     private var lastCapture = ""
 
+    /** Last turn this service posted. Merging must never borrow another app's turn. */
+    private var prevTurn: TurnUpdate? = null
+
     override fun onServiceConnected() {
         Session.mapsA11yConnected.value = true
         if (site.casiopea.cruizer.BuildConfig.DEBUG) {
@@ -64,6 +70,7 @@ class MapsScreenSource : AccessibilityService() {
     override fun onUnbind(intent: Intent?): Boolean {
         // Toggle flipped off (or ROM reset it): silently fall back to notifications.
         navClear?.let { handler.removeCallbacks(it); navClear = null }
+        prevTurn = null
         Session.mapsA11yConnected.value = false
         return super.onUnbind(intent)
     }
@@ -90,7 +97,11 @@ class MapsScreenSource : AccessibilityService() {
         val screenH = resources.displayMetrics.heightPixels.toFloat().coerceAtLeast(1f)
         val lines = ArrayList<MapsScreenTextParser.ScreenLine>()
         walk(root, screenH, lines)
-        if (lines.isEmpty()) return
+        // A Maps window we cannot read is Maps without nav controls: arm the clear.
+        if (lines.isEmpty()) {
+            scheduleNavClear()
+            return
+        }
         val navigating = MapsScreenTextParser.isNavigating(lines)
         // Debug capture, same convention as notifications: logcat + Settings card.
         // Only when the text changes, not 4x/s for the whole ride.
@@ -106,6 +117,7 @@ class MapsScreenSource : AccessibilityService() {
         }
         navClear?.let { handler.removeCallbacks(it); navClear = null }
         val update = merge(MapsScreenTextParser.extract(lines) ?: return)
+        prevTurn = update.takeUnless { it.ended }
         Session.beginRoute(MAPS_PACKAGE, ended = update.ended)
         Session.postTurn(update)
     }
@@ -119,6 +131,7 @@ class MapsScreenSource : AccessibilityService() {
         if (navClear != null || !Session.navActive.value) return
         val r = Runnable {
             navClear = null
+            prevTurn = null
             Session.endRoute(MAPS_PACKAGE)
         }
         navClear = r
@@ -131,7 +144,7 @@ class MapsScreenSource : AccessibilityService() {
      * just the route summary, so the Pod's bottom line keeps updating.
      */
     private fun merge(next: TurnUpdate): TurnUpdate {
-        val prev = Session.currentTurn.value ?: return next
+        val prev = prevTurn ?: return next
         if (next.kind != TurnKind.UNKNOWN) return next
         return prev.copy(
             remainingSeconds = next.remainingSeconds ?: prev.remainingSeconds,
@@ -145,13 +158,16 @@ class MapsScreenSource : AccessibilityService() {
         screenH: Float,
         out: MutableList<MapsScreenTextParser.ScreenLine>,
     ) {
+        // Cap the walk: Maps' window carries the map's place labels too, and every
+        // child read is a binder call on the main thread.
+        if (out.size >= MAX_LINES) return
         val rect = android.graphics.Rect()
         node.getBoundsInScreen(rect)
         val y = (rect.top / screenH).coerceIn(0f, 1f)
-        node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
-            ?.let { out.add(MapsScreenTextParser.ScreenLine(it, y)) }
-        node.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() }
-            ?.let { out.add(MapsScreenTextParser.ScreenLine(it, y)) }
+        val text = node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+        val desc = node.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+        text?.let { out.add(MapsScreenTextParser.ScreenLine(it, y)) }
+        if (desc != null && desc != text) out.add(MapsScreenTextParser.ScreenLine(desc, y))
         for (i in 0 until node.childCount) node.getChild(i)?.let { walk(it, screenH, out) }
     }
 }
