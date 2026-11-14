@@ -21,6 +21,18 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 
+    signingConfigs {
+        // One keystore everywhere: CI (secret DEBUG_KEYSTORE) restores the same
+        // file to ~/.android/debug.keystore. Explicit so AGP can never
+        // auto-generate a throwaway key on a machine where the default is missing.
+        getByName("debug") {
+            storeFile = listOf(
+                File(System.getProperty("user.home"), ".android/debug.keystore"),
+                File(System.getProperty("user.home"), ".config/.android/debug.keystore"),
+            ).first { it.exists() }
+        }
+    }
+
     buildTypes {
         debug { }
         release {
