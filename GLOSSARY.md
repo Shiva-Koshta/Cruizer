@@ -14,4 +14,6 @@ Decisions that crystallize live here. No implementation details.
 - **Turn source** — wherever Cruiser gets its turn-by-turn updates: today the notification-listener parser (`TurnSource`), later a possible OsmAnd/CoMaps fork.
 - **Frame playground** — debug-only screen that composes an arbitrary nav frame, shows its hex, and sends it live so the Pod's actual rendering can be verified against the icon table.
 - **Night-mode policy** — day/night/auto cycle chosen in settings; AUTO estimates sunrise/sunset from a coarse last-known location instead of tracking position.
+- **Route ownership** — the nav source that last posted live route data owns the ride; only that source may end it, so a browse screen in another app cannot tear down a live route.
+- **Ride log** — the live trip clock and distance shown on the Home tab. The clock follows the route; GPS only enriches distance and speed.
 - **Fill-up log** — phase-2 manual fuel entries (price per litre, km/L) with GPX export of the period's trips.

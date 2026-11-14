@@ -21,8 +21,9 @@ BLE with turn-by-turn data parsed from nav apps. One rider, one phone.
   Never change frame bytes, handshake constants or icon codes without consulting it; they are
   hardware-verified. Icons marked "Likely" are hardware-observed, never canonically sent by RE.
 - **Clean-room**: no RE app code/assets in git (`analysis/` and `*.apks` stay untracked). Credit wazetripper in `NOTICE.md`.
-- FOSS-only deps, no cloud. **Manual DI only** — `Session` (app-wide StateFlows/DataStore) is the
-  bus between UI, `PodService`, `TurnSource` and `ComapsSource`; no Hilt, no DI framework.
+- FOSS-only deps, no cloud. **Manual DI only** — `Session` (app-wide prefs/DataStore) is the
+  bus between UI, `PodService`, `TurnSource` and `ComapsSource`; route ownership lives in
+  `NavRoute`, ride clock/distance in `RideLog`. No Hilt, no DI framework.
 - AGP 9.5 has Kotlin built in: **the `kotlin-android` plugin is banned**. Java 17. material3 pinned to 1.5.0-rc01.
 - Commit after every change. **Bump `versionCode`+`versionName` on every build** the user will install.
 - Do not launch emulators (user asked to keep none; the AVD was deleted).
@@ -36,7 +37,7 @@ BLE with turn-by-turn data parsed from nav apps. One rider, one phone.
 - `TurnSource` — NotificationListenerService over nav apps (OsmAnd, Organic Maps, GMaps, Waze).
   Text parsing lives in pure `NavTextParser`. Quirks: Maps updates its notification at most
   ~once/min, carries the turn in `title` + bottom line in `subText`; "Guiding to…" and
-  "Starting navigation…" parse as Idle; `Session.navActive` holds the route-started icon
+  "Starting navigation…" parse as Idle; `NavRoute.navActive` holds the route-started icon
   between nav start and the first instruction.
 - `ComapsSource` — CoMaps' structured `content://<flavour>.provider.navigation/live` provider
   (needs a custom runtime permission, `<flavour>.permission.READ_NAVIGATION_DATA`, requested in
@@ -61,6 +62,10 @@ BLE with turn-by-turn data parsed from nav apps. One rider, one phone.
 ## Conventions
 
 - Kotlin style of the repo: small `object`s + data classes, flows over callbacks,
-  `Session.*` mutation helpers like `postTurn()`. New pure logic gets a JUnit4 test
+  mutation helpers like `NavRoute.postTurn()`. New pure logic gets a JUnit4 test
   (see `NavTextParserTest` fixtures style); Android-dependent state (e.g. `ComapsSource`)
   must not initialize Android classes at object init time or JVM tests break.
+- UI split: `MainActivity` is the shell (onboarding gate, pager, pill bar);
+  `PodScreen` holds the Home tab/banner/PIN dialog, `PodIntents` the service and
+  permission helpers, `SettingsScreen` the Settings tab.
+- Audit status (fixed vs. deliberately deferred) is in [`docs/AUDIT.md`](docs/AUDIT.md).

@@ -93,6 +93,28 @@ class NavTextParserTest {
     }
 
     @Test
+    fun minutesOnlyCountsOnlyOnTheLastLine() {
+        // A "5 min" note inside the instruction is not the route's time left.
+        val p = NavTextParser.parse("In 5 min turn right\nHead east") as Parsed.Turn
+        assertNull(p.update.remainingSeconds)
+    }
+
+    @Test
+    fun turkishLocaleDoesNotBreakPhrases() {
+        // "TURN RIGHT".lowercase() in tr_TR is "turn rıght" (dotless i): the phrase
+        // must still match, so the parser lowercases with Locale.ROOT.
+        val saved = java.util.Locale.getDefault()
+        java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"))
+        try {
+            val p = NavTextParser.parse("TURN RIGHT\nIN 250 M") as Parsed.Turn
+            assertEquals(TurnKind.RIGHT, p.update.kind)
+            assertEquals(250, p.update.distanceM)
+        } finally {
+            java.util.Locale.setDefault(saved)
+        }
+    }
+
+    @Test
     fun mapsEtaLineIsNotArrival() {
         // Live Maps notification: title "Head east", subText "Arrive 10:20".
         // "arrive" must not turn this into DESTINATION, or the route ends on the spot.

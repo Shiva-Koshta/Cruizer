@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import site.casiopea.cruizer.NavRoute
 import site.casiopea.cruizer.Session
 
 /**
@@ -54,9 +55,9 @@ class TurnSource : NotificationListenerService() {
         pendingClear?.let { handler.removeCallbacks(it); pendingClear = null }
         // Losing notification access is only fatal to a route fed by notifications:
         // a provider-fed route (CoMaps) keeps running, so do not end it here.
-        val owner = Session.lastNavSource.value ?: return
+        val owner = NavRoute.lastNavSource.value ?: return
         val providerFed = ComapsSource.installed(this).any { it == owner && ComapsSource.granted(this, it) }
-        if (!providerFed) Session.endRoute(owner)
+        if (!providerFed) NavRoute.endRoute(owner)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -83,8 +84,12 @@ class TurnSource : NotificationListenerService() {
             pendingClear?.let { handler.removeCallbacks(it) }
             val clear = Runnable {
                 pendingClear = null
-                val stillActive = activeNotifications.any(::isNavSource)
-                if (!stillActive) Session.endRoute(sbn.packageName)
+                // Same app only: a stale ongoing notification from another nav app
+                // must not keep this route alive after its own notification is gone.
+                val stillActive = activeNotifications.any {
+                    it.packageName == sbn.packageName && isNavSource(it)
+                }
+                if (!stillActive) NavRoute.endRoute(sbn.packageName)
             }
             pendingClear = clear
             handler.postDelayed(clear, 2500)
@@ -102,7 +107,7 @@ class TurnSource : NotificationListenerService() {
         // check (provider+permission), not a package-name whitelist.
         if (sbn.packageName.startsWith("app.comaps") || sbn.packageName == "app.organicmaps") {
             if (ComapsSource.installed(this).any { ComapsSource.granted(this, it) }) {
-                Session.beginRoute(sbn.packageName)
+                NavRoute.beginRoute(sbn.packageName)
                 return
             }
         }
@@ -127,20 +132,20 @@ class TurnSource : NotificationListenerService() {
         when (val p = NavTextParser.parse(body)) {
             is NavTextParser.Parsed.Turn -> {
                 // Arrival must stop the ride, like the other two sources.
-                Session.beginRoute(sbn.packageName, ended = p.update.ended)
+                NavRoute.beginRoute(sbn.packageName, ended = p.update.ended)
                 val update = if (iconKind != null && iconKind != site.casiopea.cruizer.proto.TurnKind.UNKNOWN) {
                     p.update.copy(kind = iconKind)
                 } else {
                     p.update
                 }
-                Session.postTurn(update)
+                NavRoute.postTurn(update)
             }
             NavTextParser.Parsed.Idle -> {
                 // Maps idles on "Guiding to…" before the first instruction: show the
                 // route-started icon then. Other ongoing notifications from a nav app
                 // (OsmAnd's always-on one) must not flip the Pod into route mode.
                 if (body.contains("guiding to", true) || body.contains("starting navigation", true)) {
-                    Session.beginRoute(sbn.packageName)
+                    NavRoute.beginRoute(sbn.packageName)
                 }
             }
         }

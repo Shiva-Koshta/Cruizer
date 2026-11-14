@@ -11,7 +11,6 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import site.casiopea.cruizer.ble.LinkState
-import site.casiopea.cruizer.proto.TurnUpdate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -175,75 +174,11 @@ object Session {
     val activeBikeMac = MutableStateFlow<String?>(null)
     val pinRejected = MutableStateFlow(false)
 
-    data class LiveRide(
-        val isActive: Boolean = false,
-        val startedAt: Long? = null,
-        val elapsedSeconds: Long = 0L,
-        val distanceM: Int = 0,
-        val currentSpeedKmh: Int = 0,
-        val avgSpeedKmh: Int = 0,
-        val maxSpeedKmh: Int = 0,
-    )
-
-    private val _liveRide = MutableStateFlow(LiveRide())
-    val liveRide: StateFlow<LiveRide> = _liveRide
-
-    /** A location fix actually arrived; distance/speed are real, not just zero. */
-    val hasFix = MutableStateFlow(false)
-    private var lastLiveLoc: Location? = null
-
+    /** Night-mode seed and the ride log both need the fix; the ride math lives in [RideLog]. */
     fun updateLiveLocation(location: Location) {
         lastLat = location.latitude
         lastLon = location.longitude
-        hasFix.value = true
-        // Trip timer runs while a route is live — with or without the Pod.
-        // A BLE drop mid-ride pauses nothing: the Pod merely loses its screen feed.
-        if (!navActive.value) {
-            if (_liveRide.value.isActive) resetLiveRide()
-            lastLiveLoc = null
-            return
-        }
-        val speedKmh = Math.round(location.speed * 3.6f).coerceAtLeast(0)
-        val current = ensureRideStarted()
-        val started = current.startedAt ?: System.currentTimeMillis()
-        val elapsed = ((System.currentTimeMillis() - started) / 1000).coerceAtLeast(0)
-        val prev = lastLiveLoc
-        lastLiveLoc = location
-        val delta = prev?.distanceTo(location) ?: 0f
-        val dt = if (prev != null && location.time > prev.time) ((location.time - prev.time) / 1000f).coerceIn(1f, 30f) else 1f
-        val maxRealisticDelta = 50f * dt // Up to 180 km/h (50 m/s) allowed over elapsed interval
-        val add = if (prev != null && delta in 0.4f..maxRealisticDelta) Math.round(delta) else 0
-        val newDist = current.distanceM + add
-        val elapsedHours = elapsed / 3600.0
-        val avgSpeed = if (elapsedHours > 0.0005) Math.round((newDist / 1000.0) / elapsedHours).toInt() else speedKmh
-
-        _liveRide.value = current.copy(
-            isActive = true,
-            startedAt = started,
-            elapsedSeconds = elapsed,
-            distanceM = newDist,
-            currentSpeedKmh = speedKmh,
-            avgSpeedKmh = avgSpeed,
-            maxSpeedKmh = maxOf(current.maxSpeedKmh, speedKmh),
-        )
-    }
-
-    fun resetLiveRide() {
-        lastLiveLoc = null
-        hasFix.value = false // next ride must not show the previous ride's fixes as real
-        _liveRide.value = LiveRide()
-    }
-
-    /**
-     * Timer runs on the route, not on GPS: without location permission the ride
-     * still starts when the route goes live — GPS enriches it when granted.
-     */
-    fun ensureRideStarted(): LiveRide {
-        val current = _liveRide.value
-        if (current.isActive && current.startedAt != null) return current
-        val next = current.copy(isActive = true, startedAt = current.startedAt ?: System.currentTimeMillis())
-        _liveRide.value = next
-        return next
+        RideLog.update(location, NavRoute.navActive.value)
     }
 
     fun updateSettings(f: (Settings) -> Settings) {
@@ -372,55 +307,11 @@ object Session {
             .toList()
     }
 
-    /** Latest parsed turn from any nav app; null when no active route. */
-    private val _currentTurn = MutableStateFlow<TurnUpdate?>(null)
-    val currentTurn: StateFlow<TurnUpdate?> = _currentTurn
-
-    /** A nav app has an ongoing navigation notification (even before any turn text). */
-    val navActive = MutableStateFlow(false)
-
-    /** Package of the nav app that produced the latest turn/nav activity (home-screen banner logic). */
-    val lastNavSource = MutableStateFlow<String?>(null)
-
     /** Google Maps screen-read (accessibility) service currently connected: banner hides when true. */
     val mapsA11yConnected = MutableStateFlow(false)
 
     /** Exactly what the Pod is showing right now (null = clock/PING). Set by the service. */
     val podScreen = MutableStateFlow<site.casiopea.cruizer.proto.PodProtocol.PodScreen?>(null)
-
-    fun postTurn(t: TurnUpdate?) {
-        if (BuildConfig.DEBUG) {
-            Log.i(
-                "CruizerNav",
-                "turn posted: ${t?.let { "${it.kind} dist=${it.distanceM ?: "-"} arr=${it.arrivalSecondsFromNow ?: "-"}" } ?: "null"}",
-            )
-        }
-        _currentTurn.value = t
-    }
-
-    /**
-     * A source has live route data: it takes ownership of the route (last writer
-     * wins) and, unless the update is the arrival, marks navigation active.
-     */
-    fun beginRoute(pkg: String, ended: Boolean = false) {
-        lastNavSource.value = pkg
-        navActive.value = !ended
-        // The ride clock follows the route, not the Pod: it must start even when
-        // the service (and therefore its collector) is not running.
-        if (!ended) ensureRideStarted()
-    }
-
-    /**
-     * Only the source that currently owns the route may end it. Without this a
-     * browse screen in one app tore down a ride another app was still guiding.
-     */
-    fun endRoute(pkg: String) {
-        if (lastNavSource.value != pkg) return
-        lastNavSource.value = null
-        navActive.value = false
-        postTurn(null)
-        resetLiveRide()
-    }
 
     /** BLE link state, mirrored in by the Pod service for the UI. */
     val linkState = MutableStateFlow(LinkState.DISCONNECTED)

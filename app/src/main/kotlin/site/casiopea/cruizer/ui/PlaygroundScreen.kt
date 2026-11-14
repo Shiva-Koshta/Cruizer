@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import site.casiopea.cruizer.NavRoute
 import site.casiopea.cruizer.Session
 import site.casiopea.cruizer.proto.PodProtocol
 import site.casiopea.cruizer.proto.TurnKind
@@ -133,9 +134,9 @@ fun PlaygroundScreen(onBack: () -> Unit) {
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {
-                Session.postTurn(TurnUpdate(kind, distance, exit.takeIf { kind == TurnKind.ROUNDABOUT }))
+                NavRoute.postTurn(TurnUpdate(kind, distance, exit.takeIf { kind == TurnKind.ROUNDABOUT }))
             }) { Text("Send to Pod") }
-            OutlinedButton(onClick = { Session.postTurn(null) }) { Text("Clear") }
+            OutlinedButton(onClick = { NavRoute.postTurn(null) }) { Text("Clear") }
             TextButton(onClick = onBack) { Text("Back") }
         }
     }

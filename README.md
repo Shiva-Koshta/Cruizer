@@ -25,8 +25,8 @@ First working ride target: connect, pair (PIN), navigate with OsmAnd-style
 notifications or CoMaps' structured provider, call overlay (optional
 `READ_PHONE_STATE`), radar (best effort). Settings: night mode (day/night/auto
 by sunrise–sunset), bottom-line content, 12/24 h clock, metric/imperial. The
-Trips tab records a ride (GPX track + distance) and exports it to Downloads.
-Debug builds add a **frame playground** screen.
+Home tab shows a live ride clock/distance (GPS enriches it; the clock follows
+the route). Debug builds add a **frame playground** screen.
 
 Planned: manual fill-up fuel log; possible OsmAnd fork for a structured TBT
 feed if notification text proves too coarse.

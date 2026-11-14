@@ -16,50 +16,57 @@ class RouteOwnershipTest {
 
     @Before
     fun clean() {
-        Session.navActive.value = false
-        Session.lastNavSource.value = null
-        Session.postTurn(null)
+        NavRoute.navActive.value = false
+        NavRoute.lastNavSource.value = null
+        NavRoute.postTurn(null)
     }
 
     @Test
     fun anotherAppCannotEndTheRoute() {
-        Session.beginRoute("net.osmand")
-        Session.postTurn(turn)
+        NavRoute.beginRoute("net.osmand")
+        NavRoute.postTurn(turn)
 
         // Opening Maps for traffic must not tear down OsmAnd's live ride.
-        Session.endRoute("com.google.android.apps.maps")
+        NavRoute.endRoute("com.google.android.apps.maps")
 
-        assertTrue(Session.navActive.value)
-        assertEquals("net.osmand", Session.lastNavSource.value)
-        assertEquals(turn, Session.currentTurn.value)
+        assertTrue(NavRoute.navActive.value)
+        assertEquals("net.osmand", NavRoute.lastNavSource.value)
+        assertEquals(turn, NavRoute.currentTurn.value)
     }
 
     @Test
     fun ownerEndsTheRoute() {
-        Session.beginRoute("net.osmand")
-        Session.postTurn(turn)
+        NavRoute.beginRoute("net.osmand")
+        NavRoute.postTurn(turn)
 
-        Session.endRoute("net.osmand")
+        NavRoute.endRoute("net.osmand")
 
-        assertFalse(Session.navActive.value)
-        assertNull(Session.lastNavSource.value)
-        assertNull(Session.currentTurn.value)
+        assertFalse(NavRoute.navActive.value)
+        assertNull(NavRoute.lastNavSource.value)
+        assertNull(NavRoute.currentTurn.value)
     }
 
     @Test
     fun arrivedTurnIsNotALiveRoute() {
-        Session.beginRoute("app.comaps", ended = true)
-        assertFalse(Session.navActive.value)
+        NavRoute.beginRoute("app.comaps")
+        assertTrue(RideLog.liveRide.value.isActive)
+
+        NavRoute.beginRoute("app.comaps", ended = true)
+
+        assertFalse(NavRoute.navActive.value)
+        // Arrival ends the ride: the next one must not inherit this clock.
+        assertFalse(RideLog.liveRide.value.isActive)
+        assertEquals(0L, RideLog.liveRide.value.elapsedSeconds)
     }
 
     @Test
     fun laterSourceTakesOwnership() {
-        Session.beginRoute("net.osmand")
-        Session.beginRoute("com.google.android.apps.maps")
+        NavRoute.beginRoute("net.osmand")
+        NavRoute.beginRoute("com.google.android.apps.maps")
 
-        Session.endRoute("net.osmand")
+        NavRoute.endRoute("net.osmand")
 
-        assertTrue(Session.navActive.value)
-        assertEquals("com.google.android.apps.maps", Session.lastNavSource.value)
+        assertTrue(NavRoute.navActive.value)
+        assertEquals("com.google.android.apps.maps", NavRoute.lastNavSource.value)
     }
 }

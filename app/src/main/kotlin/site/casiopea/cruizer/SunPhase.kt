@@ -9,7 +9,7 @@ object SunPhase {
     /** true when the sun is below the horizon at [now] (millis) for a given position. */
     fun isNight(lat: Double, lon: Double, now: Long): Boolean {
         val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
-        val dayOfYear = cal.get(java.util.Calendar.DAY_OF_YEAR).toDouble() + 1
+        val dayOfYear = cal.get(java.util.Calendar.DAY_OF_YEAR).toDouble() - 1
         val rad = Math.PI / 180
         val latR = lat * rad
 
@@ -29,10 +29,14 @@ object SunPhase {
         // Day length in minutes: 2 * acos(cosH) hours, and 1 hour = 15 degrees.
         val dayLengthMin = 8 * kotlin.math.acos(cosH) / rad
         // Solar noon in local minutes: UTC noon minus 4 min per degree of longitude,
-        // then shifted into the phone's zone (raw offset + DST).
+        // then shifted into the phone's zone (raw offset + DST). The equation of
+        // time corrects the up-to-16-minute difference between mean and solar time.
         val zoneMin = (cal.get(java.util.Calendar.ZONE_OFFSET) +
             cal.get(java.util.Calendar.DST_OFFSET)) / 60000
-        val solarNoonMin = 720 - 4 * lon + zoneMin
+        val b = 2 * Math.PI * (dayOfYear - 81) / 364
+        val eotMin = 9.87 * kotlin.math.sin(2 * b) - 7.53 * kotlin.math.cos(b) -
+            1.5 * kotlin.math.sin(b)
+        val solarNoonMin = 720 - 4 * lon + zoneMin - eotMin
         val sunriseMin = solarNoonMin - dayLengthMin / 2
         val sunsetMin = solarNoonMin + dayLengthMin / 2
         val minutesOfDay =

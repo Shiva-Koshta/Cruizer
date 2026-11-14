@@ -9,6 +9,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import site.casiopea.cruizer.NavRoute
 import site.casiopea.cruizer.Session
 import site.casiopea.cruizer.proto.TurnKind
 import site.casiopea.cruizer.proto.TurnUpdate
@@ -118,21 +119,21 @@ class MapsScreenSource : AccessibilityService() {
         navClear?.let { handler.removeCallbacks(it); navClear = null }
         val update = merge(MapsScreenTextParser.extract(lines) ?: return)
         prevTurn = update.takeUnless { it.ended }
-        Session.beginRoute(MAPS_PACKAGE, ended = update.ended)
-        Session.postTurn(update)
+        NavRoute.beginRoute(MAPS_PACKAGE, ended = update.ended)
+        NavRoute.postTurn(update)
     }
 
     /**
      * A Maps window without nav controls means the rider exited navigation.
      * Debounce it: one empty snapshot mid-turn must not reset the ride timer.
-     * [Session.endRoute] ignores this when another app owns the route.
+     * [NavRoute.endRoute] ignores this when another app owns the route.
      */
     private fun scheduleNavClear() {
-        if (navClear != null || !Session.navActive.value) return
+        if (navClear != null || !NavRoute.navActive.value) return
         val r = Runnable {
             navClear = null
             prevTurn = null
-            Session.endRoute(MAPS_PACKAGE)
+            NavRoute.endRoute(MAPS_PACKAGE)
         }
         navClear = r
         handler.postDelayed(r, NAV_CLEAR_MS)

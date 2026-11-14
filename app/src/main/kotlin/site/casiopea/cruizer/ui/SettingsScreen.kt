@@ -206,7 +206,7 @@ fun SettingsScreen(onPlayground: () -> Unit, modifier: Modifier = Modifier) {
                         SettingSwitch("Imperial units", s.imperial) { v ->
                             Session.updateSettings { it.copy(imperial = v) }
                         }
-                        SettingSwitch("Liquid Glass & Specular Glare", s.liquidGlass) { v ->
+                        SettingSwitch("Glass effects", s.liquidGlass) { v ->
                             Session.updateSettings { it.copy(liquidGlass = v) }
                         }
                         OutlinedTextField(

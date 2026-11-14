@@ -277,7 +277,7 @@ class PodLink(private val context: Context) {
         )
     }
 
-    fun unwatchAdapterState() = context.unregisterReceiver(stateWatch)
+    fun unwatchAdapterState() = runCatching { context.unregisterReceiver(stateWatch) }
 
     /** Offer a frame; written when the transport is idle. */
     @Synchronized

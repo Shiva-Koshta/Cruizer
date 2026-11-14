@@ -3,6 +3,7 @@ package site.casiopea.cruizer.notify
 import site.casiopea.cruizer.proto.TurnKind
 import site.casiopea.cruizer.proto.TurnUpdate
 import java.util.Calendar
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
@@ -87,7 +88,7 @@ object NavTextParser {
     }
 
     fun parse(body: String, now: Calendar = Calendar.getInstance()): Parsed {
-        val lower = body.lowercase().replace('\u00A0', ' ').replace('\u202F', ' ')
+        val lower = body.lowercase(Locale.ROOT).replace('\u00A0', ' ').replace('\u202F', ' ')
         if (lower.isBlank()) return Parsed.Idle
 
         // Maps idles on "Guiding to <destination>" and flashes "Starting navigation…"
@@ -152,7 +153,7 @@ object NavTextParser {
 
     private fun toMeters(value: String, unit: String): Int? {
         val v = value.replace(',', '.').toDoubleOrNull() ?: return null
-        return when (unit.lowercase()) {
+        return when (unit.lowercase(Locale.ROOT)) {
             "m" -> v.roundToInt()
             "km" -> (v * 1000).roundToInt()
             "ft", "feet" -> (v * 0.3048).roundToInt()
@@ -195,8 +196,10 @@ object NavTextParser {
             if (h !in 0..23 || mm !in 0..59) return null
             return h * 3600 + mm * 60
         }
-        // Google Maps standalone bottom line: "24 min".
-        MINUTES_ONLY.find(lower)?.let { m ->
+        // Google Maps standalone bottom line: "24 min". Only the last line: a
+        // "5 min" note in the instruction must not become the route's time left.
+        val last = lower.lineSequence().lastOrNull { it.isNotBlank() } ?: return null
+        MINUTES_ONLY.find(last)?.let { m ->
             return m.groupValues[1].toIntOrNull()?.takeIf { it in 1..600 }?.times(60)
         }
         return null

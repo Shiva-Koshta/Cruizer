@@ -72,6 +72,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import site.casiopea.cruizer.NavRoute
+import site.casiopea.cruizer.RideLog
 import site.casiopea.cruizer.Session
 import site.casiopea.cruizer.ble.LinkState
 import site.casiopea.cruizer.proto.Icons as PodIcons
@@ -88,9 +90,9 @@ import kotlin.math.sin
  */
 @Composable
 fun LiveTripCard(modifier: Modifier = Modifier) {
-    val liveRide by Session.liveRide.collectAsState()
-    val hasFix by Session.hasFix.collectAsState()
-    val turn by Session.currentTurn.collectAsState()
+    val liveRide by RideLog.liveRide.collectAsState()
+    val hasFix by RideLog.hasFix.collectAsState()
+    val turn by NavRoute.currentTurn.collectAsState()
     val podScreen by Session.podScreen.collectAsState()
     val settings by Session.settings.collectAsState()
     val savedPods by Session.savedPods.collectAsState()
@@ -99,7 +101,6 @@ fun LiveTripCard(modifier: Modifier = Modifier) {
 
     CruiserGlassCard(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
     ) {
         Column(
             modifier = Modifier.padding(2.dp),
@@ -127,7 +128,7 @@ fun LiveTripCard(modifier: Modifier = Modifier) {
                     )
                 }
 
-                TextButton(onClick = Session::resetLiveRide) {
+                TextButton(onClick = RideLog::reset) {
                     Text("Reset Trip")
                 }
             }
@@ -361,7 +362,7 @@ private fun DrawScope.drawArrowHead(tip: Offset, angleDeg: Float, sizePx: Float,
 
 @Composable
 private fun LiveRideMetricsSection(
-    ride: Session.LiveRide,
+    ride: RideLog.LiveRide,
     settings: Session.Settings,
     bike: Session.SavedPod?,
     hasFix: Boolean,
@@ -450,7 +451,6 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
 
     CruiserGlassCard(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
     ) {
         Column(
             modifier = Modifier.padding(2.dp),
@@ -666,8 +666,11 @@ fun SavedPodsCard(modifier: Modifier = Modifier) {
             },
             confirmButton = {
                 Button(onClick = {
-                    val ccVal = customCc.toIntOrNull() ?: selectedModel.cc
-                    val kmplVal = customKmpl.toDoubleOrNull() ?: selectedModel.kmpl
+                    // Trust boundary: the keyboard allows anything, so clamp to a
+                    // plausible motorcycle before it reaches the economy maths.
+                    val ccVal = (customCc.toIntOrNull() ?: selectedModel.cc).coerceIn(50, 2000)
+                    val kmplVal = (customKmpl.toDoubleOrNull() ?: selectedModel.kmpl)
+                        .coerceIn(1.0, 100.0)
                     Session.savePod(pod.mac, newName, selectedModel, ccVal, kmplVal)
                     renamingPod = null
                 }) {

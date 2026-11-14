@@ -3,6 +3,7 @@ package site.casiopea.cruizer.notify
 import site.casiopea.cruizer.proto.TurnKind
 import site.casiopea.cruizer.proto.TurnUpdate
 import java.util.Calendar
+import java.util.Locale
 
 /**
  * Pure parser for Google Maps' on-screen accessibility text.
@@ -76,7 +77,7 @@ object MapsScreenTextParser {
      * Parking" must not pass the gate on its own.
      */
     fun isNavigating(lines: List<ScreenLine>): Boolean {
-        val all = lines.joinToString("\n") { it.text }.lowercase()
+        val all = lines.joinToString("\n") { it.text }.lowercase(Locale.ROOT)
         val controls = NAV_CONTROLS.count(all::contains)
         if (controls >= 2) return true
         if (controls == 0) return false

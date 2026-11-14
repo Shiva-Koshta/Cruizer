@@ -105,7 +105,7 @@ class PodService : Service() {
                 // mode, and an hour of 1 Hz fixes for a Pod that never connected is
                 // pure battery. Re-checking every tick also picks up a permission
                 // granted after the service started.
-                if (Session.navActive.value) startLiveLocation() else stopLiveLocation()
+                if (NavRoute.navActive.value) startLiveLocation() else stopLiveLocation()
                 if (link.state.value != LinkState.CONNECTED) {
                     val timeoutMinutes = Session.settings.value.disconnectTimeoutMinutes
                     disconnectedMs += CONNECT_PAUSE_MS
@@ -151,6 +151,24 @@ class PodService : Service() {
             hasPerm(Manifest.permission.BLUETOOTH_SCAN)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // startAsForeground can fail (permission revoked mid-start) and stopSelf()
+        // from onCreate; a queued command must not touch the uninitialised link.
+        if (!::link.isInitialized) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        // Forget/stop must not connect first: podForget can target a saved bike
+        // that is not the remembered Pod, and a scan here resurrects it.
+        when (intent?.action) {
+            ACTION_STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_FORGET -> {
+                forgetPod(intent.getStringExtra(EXTRA_MAC))
+                return START_NOT_STICKY
+            }
+        }
         if (intent?.getBooleanExtra(EXTRA_SCAN_NEW, false) == true) {
             link.deviceAddress.value = null
             if (bleReady()) link.disconnect()
@@ -164,10 +182,6 @@ class PodService : Service() {
                 link.scanOrConnect(bleReady())
             }
         }
-        when (intent?.action) {
-            ACTION_STOP -> stopSelf()
-            ACTION_FORGET -> forgetPod(intent?.getStringExtra(EXTRA_MAC))
-        }
         return START_STICKY
     }
 
@@ -176,9 +190,11 @@ class PodService : Service() {
         tickJob?.cancel()
         unregisterPhoneState()
         stopLiveLocation()
-        link.disconnect()
-        link.closeServer()
-        link.unwatchAdapterState()
+        if (::link.isInitialized) {
+            link.disconnect()
+            link.closeServer()
+            link.unwatchAdapterState()
+        }
         ComapsSource.stop(this)
         // The state collector is cancelled below; mirror the final state directly
         // so the UI never keeps a dead "Connected" screen.
@@ -215,19 +231,19 @@ class PodService : Service() {
             }
         }.launchIn(scope)
 
-        Session.navActive.onEach { active ->
+        NavRoute.navActive.onEach { active ->
             if (active) {
                 // Route live => the ride clock starts, GPS or not (hybrid timer).
-                Session.ensureRideStarted()
+                RideLog.ensureStarted()
             } else {
-                Session.resetLiveRide() // nav ended: stop the trip timer
+                RideLog.reset() // nav ended: stop the trip timer
             }
         }.launchIn(scope)
 
         // Local mirror only to detect the null -> turn edge; the shared state
-        // lives in Session.currentTurn.
+        // lives in NavRoute.currentTurn.
         var prevTurn: TurnUpdate? = null
-        Session.currentTurn.onEach { t ->
+        NavRoute.currentTurn.onEach { t ->
             if (t == null) lastManeuver = null
             // An ended turn re-posted by its source is still the same ride: only a
             // fresh turn re-arms the splash, or the Pod alternates splash/arrival.
@@ -341,10 +357,10 @@ class PodService : Service() {
             lastFrameSentAt = now
             return
         }
-        val turn = Session.currentTurn.value
+        val turn = NavRoute.currentTurn.value
         if (turn == null) {
             if (now - lastFrameSentAt > 2000) {
-                if (Session.navActive.value) {
+                if (NavRoute.navActive.value) {
                     // Route is live but has no instruction yet: keep the Pod on
                     // the route-started icon instead of its clock screen.
                     sendRouteStarted()
@@ -373,7 +389,7 @@ class PodService : Service() {
                 )
             )
             Session.podScreen.value = PodProtocol.PodScreen(Icons.DESTINATION.code, "", null, night)
-            Session.postTurn(null)
+            NavRoute.postTurn(null)
             lastFrameSentAt = now
             return
         }
@@ -455,10 +471,10 @@ class PodService : Service() {
     /** Re-send the screen the Pod is on: the day/night bit only lives in nav frames. */
     private fun resendScreen() {
         val now = System.currentTimeMillis()
-        val turn = Session.currentTurn.value
+        val turn = NavRoute.currentTurn.value
         when {
             turn != null && !turn.ended -> renderNavFrame(turn, currentNight(), now)
-            Session.navActive.value -> sendRouteStarted()
+            NavRoute.navActive.value -> sendRouteStarted()
         }
     }
 
@@ -520,7 +536,9 @@ class PodService : Service() {
     private fun refreshLocation() {
         if (!hasPerm(Manifest.permission.ACCESS_COARSE_LOCATION)) return
         val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        lm.allProviders.mapNotNull { lm.getLastKnownLocation(it) }
+        // Coarse-only permission throws when GPS is queried; skip providers we
+        // cannot read instead of losing the whole seed fix.
+        lm.allProviders.mapNotNull { p -> runCatching { lm.getLastKnownLocation(p) }.getOrNull() }
             .firstOrNull()?.let {
                 Session.lastLat = it.latitude
                 Session.lastLon = it.longitude

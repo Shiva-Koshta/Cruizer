@@ -22,7 +22,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -38,7 +37,6 @@ import site.casiopea.cruizer.Session
 @Composable
 fun Modifier.liquidGlass(
     enabled: Boolean,
-    shape: Shape = RoundedCornerShape(24.dp),
     borderWidth: Dp = 1.dp,
 ): Modifier {
     if (!enabled) return this
@@ -84,7 +82,6 @@ fun Modifier.liquidGlass(
 @Composable
 fun CruiserGlassCard(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(24.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val isGlass by Session.isLiquidGlass.collectAsState()
@@ -138,7 +135,7 @@ fun CruiserGlassCard(
     } else {
         Card(
             modifier = modifier,
-            shape = shape,
+            shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             ),

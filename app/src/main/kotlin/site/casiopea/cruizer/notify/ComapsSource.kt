@@ -5,6 +5,7 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import site.casiopea.cruizer.NavRoute
 import site.casiopea.cruizer.Session
 import site.casiopea.cruizer.proto.TurnKind
 import site.casiopea.cruizer.proto.TurnUpdate
@@ -51,35 +52,36 @@ object ComapsSource {
     fun permissions(context: Context): List<String> =
         installed(context).filter { !granted(context, it) }.map { it + PERMISSION_SUFFIX }
 
-    private var registered = false
+    /** Packages whose provider is registered; also survives a later install/grant. */
+    private val registered = mutableSetOf<String>()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun start(context: Context) {
-        if (registered) return
         val app = context.applicationContext
         appContext = app
-        var ok = 0
+        val added = mutableListOf<String>()
         installed(app).filter { granted(app, it) }.forEach { pkg ->
+            if (pkg in registered) return@forEach
             runCatching {
                 app.contentResolver.registerContentObserver(
                     Uri.parse("content://$pkg$AUTHORITY_SUFFIX/live"),
                     false,
                     observer,
                 )
-                ok++
+                registered += pkg
+                added += pkg
             }
         }
-        if (ok == 0) return
-        registered = true
-        // Registration stays synchronous (stop() must see it), but the provider query
-        // is a binder call: never run it on the caller's main thread.
-        scope.launch { observer.query(app) } // surface a session already in progress
+        if (added.isEmpty()) return
+        // Query each new provider once: surface a session already in progress,
+        // and pick up a flavour installed/granted after the service started.
+        added.forEach { pkg -> scope.launch { observer.query(app, pkg) } }
     }
 
     fun stop(context: Context) {
-        if (!registered) return
-        registered = false
+        if (registered.isEmpty()) return
+        registered.clear()
         try {
             context.applicationContext.contentResolver.unregisterContentObserver(observer)
         } catch (_: Exception) {
@@ -95,70 +97,82 @@ object ComapsSource {
         private var pending = false
         private var lastQueryAt = 0L
         private var ownedPkg: String? = null // package whose turn is currently on the Pod
+        private val generation = java.util.concurrent.atomic.AtomicInteger()
 
-        override fun onChange(selfChange: Boolean) {
+        override fun onChange(selfChange: Boolean, uri: Uri?) {
             val ctx = appContext ?: return
+            // Query the provider that changed, not the first installed flavour:
+            // with CoMaps and Organic Maps both installed the first one shadowed
+            // the other's live data.
+            val pkg = uri?.authority?.substringBefore(AUTHORITY_SUFFIX)
             if (System.currentTimeMillis() - lastQueryAt < 250) {
                 if (!pending) {
                     pending = true
-                    handler.postDelayed({ pending = false; query(ctx) }, 250)
+                    handler.postDelayed({ pending = false; query(ctx, pkg) }, 250)
                 }
                 return
             }
             lastQueryAt = System.currentTimeMillis()
-            query(ctx)
+            query(ctx, pkg)
         }
 
-        fun query(ctx: Context) {
-            scope.launch {
-                val pkg = installed(ctx).firstOrNull { granted(ctx, it) } ?: return@launch
-                try {
-                    val cursor = ctx.contentResolver.query(
-                        Uri.parse("content://$pkg$AUTHORITY_SUFFIX/live"),
-                        null, null, null, null,
-                    )
-                    val row = cursor?.use { c ->
-                        if (!c.moveToFirst()) null else Row(
-                            car = c.col("car_direction"),
-                            ped = c.col("pedestrian_direction"),
-                            distToTurn = c.col("dist_to_turn"),
-                            distToTarget = c.col("dist_to_target"),
-                            timeSeconds = c.intOrNull("total_time_seconds"),
-                            exitNum = c.intOrNull("exit_num"),
+        fun query(ctx: Context, pkg: String?) {
+            val targets = pkg?.let(::listOf) ?: registered.toList()
+            // Overlapping binder queries can finish out of order: only the newest
+            // generation may post, or an old row lands after an end-route.
+            val seq = generation.incrementAndGet()
+            targets.forEach { target ->
+                if (!granted(ctx, target)) return@forEach
+                scope.launch {
+                    try {
+                        val cursor = ctx.contentResolver.query(
+                            Uri.parse("content://$target$AUTHORITY_SUFFIX/live"),
+                            null, null, null, null,
                         )
-                    }
-                    val update = row?.let {
-                        turnUpdate(it.car, it.ped, it.distToTurn, it.distToTarget, it.timeSeconds, it.exitNum)
-                    }
-                    if (row == null) {
-                        // Only an empty row means CoMaps stopped navigating. An
-                        // unmappable direction enum is still a live route: treating
-                        // it as "ended" tore the ride down mid-leg.
-                        if (ownedPkg == pkg) {
-                            Session.endRoute(pkg)
+                        val row = cursor?.use { c ->
+                            if (!c.moveToFirst()) null else Row(
+                                car = c.col("car_direction"),
+                                ped = c.col("pedestrian_direction"),
+                                distToTurn = c.col("dist_to_turn"),
+                                distToTarget = c.col("dist_to_target"),
+                                timeSeconds = c.intOrNull("total_time_seconds"),
+                                exitNum = c.intOrNull("exit_num"),
+                            )
+                        }
+                        if (seq != generation.get()) return@launch
+                        val update = row?.let {
+                            turnUpdate(it.car, it.ped, it.distToTurn, it.distToTarget, it.timeSeconds, it.exitNum)
+                        }
+                        if (row == null) {
+                            // Only an empty row means CoMaps stopped navigating. An
+                            // unmappable direction enum is still a live route: treating
+                            // it as "ended" tore the ride down mid-leg.
+                            if (ownedPkg == target) {
+                                NavRoute.endRoute(target)
+                                ownedPkg = null
+                            }
+                            return@launch
+                        }
+                        if (update == null) return@launch // unknown enum: keep the last turn
+                        // Arrival must stop the ride, like the other two sources.
+                        NavRoute.beginRoute(target, ended = update.ended)
+                        NavRoute.postTurn(update)
+                        ownedPkg = target
+                    } catch (_: SecurityException) {
+                        // rider revoked CoMaps permission mid-session; drop own turn safely
+                        if (ownedPkg == target) {
+                            NavRoute.endRoute(target)
                             ownedPkg = null
                         }
-                        return@launch
+                    } catch (_: Exception) {
                     }
-                    if (update == null) return@launch // unknown enum: keep the last turn
-                    // Arrival must stop the ride, like the other two sources.
-                    Session.beginRoute(pkg, ended = update.ended)
-                    Session.postTurn(update)
-                    ownedPkg = pkg
-                } catch (_: SecurityException) {
-                    // rider revoked CoMaps permission mid-session; drop own turn safely
-                    if (ownedPkg == pkg) {
-                        Session.endRoute(pkg)
-                        ownedPkg = null
-                    }
-                } catch (_: Exception) {
                 }
             }
         }
 
         fun dropOwnTurn() {
             // Go through the ownership check: the route may have moved to another app.
-            ownedPkg?.let(Session::endRoute)
+            ownedPkg?.let(NavRoute::endRoute)
             ownedPkg = null
         }
     }
