@@ -21,6 +21,11 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 
+    // Reproducible builds: the dependency-info block embeds AGP/dependency versions per builder.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
     signingConfigs {
         // One keystore everywhere: CI (secret DEBUG_KEYSTORE) restores the same
         // file to ~/.android/debug.keystore. Explicit so AGP can never
