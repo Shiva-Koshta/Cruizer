@@ -16,7 +16,7 @@ Binaries: https://github.com/nxs-neo/Cruizer/releases/download/v%v/cruizer-%v.ap
 Builds:
   - versionName: 1.0.1
     versionCode: 49
-    commit: 8f536d1a88f0889b98a8184405b4c927b5f758f2
+    commit: 67c952b0d4b3b57ba7f923f994e4941f5e04e004
     subdir: app
     gradle:
       - yes
