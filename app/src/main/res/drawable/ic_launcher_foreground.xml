@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
-    android:src="@drawable/ic_launcher_foreground_art"
-    android:gravity="fill" />
+<!-- Inset keeps the art inside the 66dp adaptive-icon safe zone, so launchers
+     with circular/squircle masks do not zoom-crop it. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:inset="18dp">
+    <bitmap
+        android:src="@drawable/ic_launcher_foreground_art"
+        android:gravity="fill" />
+</inset>
