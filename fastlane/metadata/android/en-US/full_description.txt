@@ -1,5 +1,4 @@
-Cruizer drives the Royal Enfield Tripper Pod on your motorcycle's dial with
-turn-by-turn directions — without Royal Enfield's own app, an account, or an
+Cruizer drives the Royal Enfield Tripper Pod without Royal Enfield's own app, an account, or an
 internet connection. Your navigation app already knows where to turn; Cruizer
 relays those directions to the Pod's screen.
 

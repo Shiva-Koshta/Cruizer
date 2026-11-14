@@ -11,8 +11,8 @@ android {
         applicationId = "site.casiopea.cruizer"
         minSdk = 31
         targetSdk = 37
-        versionCode = 47
-        versionName = "0.5.18"
+        versionCode = 48
+        versionName = "1.0.0"
     }
 
     testOptions {
@@ -43,6 +43,8 @@ android {
                 "proguard-rules.pro",
             )
             signingConfig = signingConfigs.getByName("debug")
+            // Reproducible builds: AGP 9 embeds the git commit in META-INF otherwise.
+            vcsInfo { include = false }
         }
     }
     buildFeatures {
