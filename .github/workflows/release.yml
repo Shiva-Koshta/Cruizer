@@ -25,7 +25,11 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
+      # The ubuntu runner ships the SDK; the old "tools" package that
+      # android-actions/setup-android@v3 still installs no longer exists.
+      # Accept licenses so AGP can auto-download platform/build-tools.
+      - name: Accept SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
 
       # Same keystore as local builds, so Actions releases update over
       # locally installed apps (and vice versa) without uninstalling.
