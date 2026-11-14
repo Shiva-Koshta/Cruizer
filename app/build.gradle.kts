@@ -11,8 +11,8 @@ android {
         applicationId = "site.casiopea.cruizer"
         minSdk = 31
         targetSdk = 37
-        versionCode = 46
-        versionName = "0.5.17"
+        versionCode = 47
+        versionName = "0.5.18"
     }
 
     testOptions {
@@ -24,7 +24,12 @@ android {
     buildTypes {
         debug { }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -36,6 +41,12 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
+
+// AGP 9.5's compose-mapping task resolves compose-group-mapping against its
+// embedded Kotlin (2.2.10), which was never published. Force the real one.
+configurations.matching { it.name.contains("composeMapping") }.configureEach {
+    resolutionStrategy.force("org.jetbrains.kotlin:compose-group-mapping:2.3.20")
 }
 
 dependencies {

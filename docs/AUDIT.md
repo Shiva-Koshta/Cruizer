@@ -91,6 +91,11 @@ current pass.
 ## Verification
 
 - `./gradlew app:assembleRelease app:testDebugUnitTest --no-daemon` passes.
+- Release builds are R8-minified and resource-shrunk (`isMinifyEnabled = true`,
+  ~3.0 MB APK, one dex). AGP 9.5's compose-mapping task resolves
+  `compose-group-mapping` against its unpublished embedded Kotlin, so the
+  configuration is forced to the published 2.3.20.
 - Device smoke test on the rider's phone: install, notification-listener
-  grant, foreground-service start, connect/disconnect, nav frame stream.
+  grant, foreground-service start, connect/disconnect, nav frame stream
+  (**R8-minified APK needs one re-check on the phone**).
 - Known gap: no real Maps icon fixture and no automated BLE test.
