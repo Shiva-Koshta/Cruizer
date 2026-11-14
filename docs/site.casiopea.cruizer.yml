@@ -21,6 +21,6 @@ Builds:
       - yes
   - versionCode: 47
     versionName: 0.5.18
-    commit: ae2a13a0d1a45a3ee2b0ef93e6b5f95c44b07174
+    commit: ae2a13a5560d7ec087a64d6ee1e8f691e00a4a37
     gradle:
       - yes
