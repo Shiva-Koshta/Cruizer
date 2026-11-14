@@ -1,20 +1,37 @@
-Cruizer drives a Royal Enfield Tripper Pod directly from your phone over Bluetooth. No extra gadgets, no cloud, no account — pair the pod, start navigation in your usual app, and the pod shows the same turn-by-turn directions it would if you were using the dealer's own setup.
+Cruizer drives the Royal Enfield Tripper Pod on your motorcycle's dial with
+turn-by-turn directions — without Royal Enfield's own app, an account, or an
+internet connection. Your navigation app already knows where to turn; Cruizer
+relays those directions to the Pod's screen.
 
-<b>What it does</b>
+<b>What you get</b>
 
-• Pair with the Tripper Pod over Bluetooth LE using the same PIN handshake as the official system
-• Render turn-by-turn instructions, distance to turn, ETA and distance remaining on the pod's display
-• Pull live directions from Google Maps, Waze, OsmAnd, Organic Maps and CoMaps — whatever you already use
-• Show ride distance and ride time on the dash card, with an optional night mode
+• Turn arrows on the dial: left/right, slight, sharp, U-turn, roundabouts with the exit number
+• Distance to the turn counting down; the bottom line can show remaining route distance, arrival time, or alternate between them
+• Live ride stats in the app: time, distance, speeds, an estimated fuel figure (GPS optional — the clock works without location permission)
+• Multiple saved bikes (engine size, economy) for the fuel estimate
+• Day/night mode for the Pod that follows the sun's position, or manual
+
+<b>⚠️ Status: early, expect bugs</b>
+
+Cruizer works, but it is <b>not stable software yet</b>. It speaks a
+reverse-engineered protocol and reads other apps' notifications — corner
+cases will misbehave, and significant bugs are likely. Verify it while
+parked and be ready to ignore the Pod if the screen goes wrong mid-ride.
+
+<b>AI notice:</b> this code was written with substantial assistance from AI
+tools (LLM-based coding agents) and reviewed by a human. Read what it does,
+not just what it claims.
 
 <b>How it works</b>
 
-Cruizer reads navigation from the app you choose — through its structured navigation feed (CoMaps) or the on-screen turn text (Google Maps and friends). That text is parsed into the compact instruction format the pod's protocol uses, and sent to the pod every second. Navigation apps don't need to be modified.
+1. Turn the ignition on. The Pod advertises over Bluetooth for about 30 seconds.
+2. Press Connect in Cruizer and type the 6-digit PIN the Pod shows — the phone is remembered for later rides.
+3. Start navigation in your app (CoMaps, OsmAnd, Organic Maps, Google Maps, Waze). Cruizer reads its turn instructions — structured data where available, notifications otherwise (Google Maps only updates its notification about once a minute) — and sends them to the Pod about once per second.
 
-<b>Before you rely on it</b>
+Nothing leaves your phone: no cloud, no account, no tracking.
 
-This is a young, one-person project. It works on the author's own bike and phone, but treat it as an early experiment: expect rough edges, and always keep the road in view — glance at the pod only when it's safe.
+<b>Requirements</b>
 
-<b>Privacy</b>
-
-Everything runs on your phone. There are no servers, no analytics and no tracking. Cruizer never talks to anything except your pod and the navigation app you feed it.
+• An Android 12+ phone with Bluetooth
+• A Royal Enfield Tripper Pod (Meteor 350 etc.). The newer Tripper Dash cluster (Hunter 350 etc.) is a different device and is not supported yet.
+• Optional: location permission for the ride distance/speed and the day/night mode
