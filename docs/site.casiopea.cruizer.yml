@@ -10,12 +10,17 @@ IssueTracker: https://github.com/nxs-neo/Cruizer/issues
 Changelog: https://github.com/nxs-neo/Cruizer/releases
 AutoUpdateMode: Version +v%v
 UpdateCheckMode: RepoManifest
-CurrentVersion: 0.5.17
-CurrentVersionCode: 46
+CurrentVersion: 0.5.18
+CurrentVersionCode: 47
 
 Builds:
   - versionCode: 46
     versionName: 0.5.17
     commit: b18d4b698e6687a2f8367da1cfd0e36df4567863
+    gradle:
+      - yes
+  - versionCode: 47
+    versionName: 0.5.18
+    commit: 4f4ff20bdc0613133fa020d9adc1752ad38ccb21
     gradle:
       - yes
