@@ -6,6 +6,8 @@ AuthorEmail: john_ninan@tuta.io
 SourceCode: https://github.com/nxs-neo/Cruizer
 IssueTracker: https://github.com/nxs-neo/Cruizer/issues
 Changelog: https://github.com/nxs-neo/Cruizer/releases
+RepoType: git
+Repo: https://github.com/nxs-neo/Cruizer
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 CurrentVersion: 0.5.18
