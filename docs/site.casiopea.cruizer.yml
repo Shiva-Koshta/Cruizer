@@ -1,0 +1,21 @@
+# Draft F-Droid metadata. To submit: copy to the `metadata/` directory of a fork of
+# https://gitlab.com/fdroid/fdroiddata and open a merge request (fdroid prep work happens there).
+Categories:
+  - Navigation
+License: GPL-3.0-or-later
+AuthorName: neo
+AuthorEmail: john_ninan@tuta.io
+SourceCode: https://github.com/nxs-neo/Cruizer
+IssueTracker: https://github.com/nxs-neo/Cruizer/issues
+Changelog: https://github.com/nxs-neo/Cruizer/releases
+AutoUpdateMode: Version +v%v
+UpdateCheckMode: RepoManifest
+CurrentVersion: 0.5.17
+CurrentVersionCode: 46
+
+Builds:
+  - versionCode: 46
+    versionName: 0.5.17
+    commit: b18d4b698e6687a2f8367da1cfd0e36df4567863
+    gradle:
+      - yes
