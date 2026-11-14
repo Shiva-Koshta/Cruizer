@@ -14,9 +14,9 @@ Repo: https://github.com/nxs-neo/Cruizer
 Binaries: https://github.com/nxs-neo/Cruizer/releases/download/v%v/cruizer-%v.apk
 
 Builds:
-  - versionName: 1.0.1
-    versionCode: 49
-    commit: 67c952b0d4b3b57ba7f923f994e4941f5e04e004
+  - versionName: 1.0.2
+    versionCode: 50
+    commit: 05184f88790d43ad587d8fba0f7217c107f6655f
     subdir: app
     gradle:
       - yes
@@ -25,5 +25,5 @@ AllowedAPKSigningKeys: a4b54e14dd3ebff0a72ec97c25f973544195402e3aca19c256a56495a
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 1.0.1
-CurrentVersionCode: 49
+CurrentVersion: 1.0.2
+CurrentVersionCode: 50
