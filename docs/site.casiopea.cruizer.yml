@@ -14,11 +14,6 @@ CurrentVersion: 0.5.18
 CurrentVersionCode: 47
 
 Builds:
-  - versionCode: 46
-    versionName: 0.5.17
-    commit: b18d4b698e6687a2f8367da1cfd0e36df4567863
-    gradle:
-      - yes
   - versionCode: 47
     versionName: 0.5.18
     commit: ae2a13a5560d7ec087a64d6ee1e8f691e00a4a37
