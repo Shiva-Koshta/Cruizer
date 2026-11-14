@@ -12,3 +12,8 @@ app/build/
 local.properties
 .idea/
 android-sdk/
+
+# Release keystore (never commit)
+*.keystore
+*.jks
+*.p12

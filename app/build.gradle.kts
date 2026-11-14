@@ -3,6 +3,38 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Release signing is optional.
+// F-Droid builds without these variables and produces an unsigned APK.
+val releaseKeystorePath =
+    providers.environmentVariable("RELEASE_KEYSTORE_PATH").orNull
+val releaseStorePassword =
+    providers.environmentVariable("RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias =
+    providers.environmentVariable("RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword =
+    providers.environmentVariable("RELEASE_KEY_PASSWORD").orNull
+
+val signingValues =
+    listOf(
+        releaseKeystorePath,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    )
+
+val hasReleaseSigning = signingValues.all { !it.isNullOrBlank() }
+val hasPartialSigning = signingValues.any { !it.isNullOrBlank() }
+
+if (hasPartialSigning && !hasReleaseSigning) {
+    throw GradleException("Incomplete release signing configuration")
+}
+
+val debugKeystoreFile =
+    listOf(
+        File(System.getProperty("user.home"), ".android/debug.keystore"),
+        File(System.getProperty("user.home"), ".config/.android/debug.keystore"),
+    ).firstOrNull { it.exists() }
+
 android {
     namespace = "site.casiopea.cruizer"
     compileSdk = 37
@@ -11,8 +43,8 @@ android {
         applicationId = "site.casiopea.cruizer"
         minSdk = 31
         targetSdk = 37
-        versionCode = 48
-        versionName = "1.0.0"
+        versionCode = 49
+        versionName = "1.0.1"
     }
 
     testOptions {
@@ -26,36 +58,56 @@ android {
         includeInApk = false
         includeInBundle = false
     }
+
     signingConfigs {
-        // One keystore everywhere: CI (secret DEBUG_KEYSTORE) restores the same
-        // file to ~/.android/debug.keystore. Explicit so AGP can never
-        // auto-generate a throwaway key on a machine where the default is missing.
-        getByName("debug") {
-            storeFile = listOf(
-                File(System.getProperty("user.home"), ".android/debug.keystore"),
-                File(System.getProperty("user.home"), ".config/.android/debug.keystore"),
-            ).first { it.exists() }
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseStorePassword!!
+                keyAlias = releaseKeyAlias!!
+                keyPassword = releaseKeyPassword!!
+            }
+        } else if (debugKeystoreFile != null) {
+            // Local-dev convenience: fall back to the debug keystore so
+            // assembleRelease stays installable. Never used by F-Droid
+            // (signing configs are stripped there) or by CI (release env set).
+            getByName("debug") {
+                storeFile = debugKeystoreFile
+            }
         }
     }
 
     buildTypes {
         debug { }
+
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            signingConfig = signingConfigs.getByName("debug")
+
+            // Developer CI signs with the permanent release key.
+            // F-Droid builds remain unsigned for reproducibility verification.
+            signingConfig =
+                when {
+                    hasReleaseSigning -> signingConfigs.getByName("release")
+                    debugKeystoreFile != null -> signingConfigs.getByName("debug")
+                    else -> null
+                }
+
             // Reproducible builds: AGP 9 embeds the git commit in META-INF otherwise.
             vcsInfo { include = false }
         }
     }
+
     buildFeatures {
         compose = true
         buildConfig = true
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

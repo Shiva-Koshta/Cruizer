@@ -1,9 +1,9 @@
 name: Release
 
 # Manual release: bump versionCode/versionName in app/build.gradle.kts, commit,
-# then run this workflow from the Actions tab. It tests, builds, signs with the
-# same debug key as local installs (secret DEBUG_KEYSTORE = base64 debug.keystore),
-# tags v<versionName> and publishes a GitHub Release with auto-generated notes.
+# then run this workflow from the Actions tab. It tests, builds and signs with
+# the dedicated release key (secret RELEASE_KEYSTORE), tags v<versionName> and
+# publishes a GitHub Release with auto-generated notes.
 # Re-running for the same version fails on release-create by design: bump first.
 
 on:
@@ -31,12 +31,24 @@ jobs:
       - name: Accept SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
 
-      # Same keystore as local builds, so Actions releases update over
-      # locally installed apps (and vice versa) without uninstalling.
-      - name: Restore signing key
+      # Restore the dedicated release keystore from secrets and expose it to Gradle.
+      # F-Droid builds without these (unsigned) for reproducibility verification.
+      - name: Restore release signing key
+        env:
+          RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
-          mkdir -p ~/.android
-          printf '%s' "${{ secrets.DEBUG_KEYSTORE }}" | base64 -d > ~/.android/debug.keystore
+          if [ -z "$RELEASE_KEYSTORE" ]; then
+            echo "RELEASE_KEYSTORE secret missing; building unsigned" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          mkdir -p ~/.config/cruizer
+          printf '%s' "$RELEASE_KEYSTORE" | base64 -d > ~/.config/cruizer/release.keystore
+          echo "RELEASE_KEYSTORE_PATH=$HOME/.config/cruizer/release.keystore" >> "$GITHUB_ENV"
+          echo "RELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "RELEASE_KEY_ALIAS=cruizer" >> "$GITHUB_ENV"
+          echo "RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Test and build
         run: ./gradlew app:testDebugUnitTest app:assembleRelease --no-daemon
