@@ -6,58 +6,59 @@
   <img src="docs/screenshots/settings.png" width="270" alt="Cruizer settings screen" />
 </p>
 
-Cruizer is a free, open-source Android app that turns the little round
-**Royal Enfield Tripper Pod** on your motorcycle's dial into a smart
-turn-by-turn display — without needing Royal Enfield's own app, an account,
-or an internet connection.
-
-Your phone already knows where to turn: it's running a navigation app like
-OsmAnd, Organic Maps, CoMaps, Google Maps or Waze. Cruizer simply takes those
-directions and projects them onto the Pod's screen, exactly like the official
-app does — but it works with the navigation app *you* already use.
+Cruizer is a free, open-source Android app that drives the round
+**Royal Enfield Tripper Pod** on your motorcycle's dial with turn-by-turn
+directions — without Royal Enfield's own app, an account, or an internet
+connection. Your navigation app (OsmAnd, Organic Maps, CoMaps, Google Maps,
+Waze) already knows where to turn; Cruizer relays those directions to the
+Pod's screen.
 
 ## What you get
 
-- **Turn arrows on your dial.** Left, right, slight, sharp, U-turn,
-  roundabouts with the exit number — the Pod shows the same big arrows the
-  official app draws.
-- **Distances that make sense.** "In 250 m" counts down as you ride, and the
-  bottom line can show how far the trip has left, your arrival time, or both
-  cycling every few seconds.
-- **Live ride stats.** Time, distance, current/average/max speed and an
-  estimated fuel figure, right in the app (GPS-optional; the clock works even
-  without location permission).
-- **Multi-bike support.** Save a profile per bike (engine size, real-world
-  economy) so fuel estimates match the machine you're riding.
-- **Auto day/night.** The Pod's screen dims at night based on the sun's
-  actual position, so it never blinds you after dark.
+- Turn arrows on the dial: left/right, slight, sharp, U-turn, roundabouts
+  with the exit number.
+- Distance to the turn counting down; the bottom line can show remaining
+  route distance, your arrival time, or alternate between them.
+- Live ride stats in the app: time, distance, speeds, an estimated fuel
+  figure (GPS optional; the clock works without location permission).
+- Multiple saved bikes (engine size, economy) for the fuel estimate.
+- Day/night mode for the Pod that follows the sun's position, or manual.
 
-## How it works (the short version)
+## ⚠️ Status: early, expect bugs
 
-1. Turn the ignition on. The Pod starts advertising over Bluetooth for about
+Cruizer works, but it is **not stable software yet**. It speaks a
+reverse-engineered protocol and reads other apps' notifications — corner
+cases will misbehave, and significant bugs are likely. Verify it while
+parked and be ready to ignore the Pod if the screen goes wrong mid-ride.
+
+**AI notice:** this code was written with substantial assistance from AI
+tools (LLM-based coding agents) and reviewed by a human. Read what it does,
+not just what it claims.
+
+## How it works
+
+1. Turn the ignition on. The Pod advertises over Bluetooth for about
    30 seconds.
 2. Press **Connect** in Cruizer. The Pod shows a 6-digit PIN — type it in
-   once and the phone is remembered. After that, every ride reconnects by
-   itself.
-3. Start navigation in your favourite app. Cruizer reads its turn
-   instructions (from the app's own navigation data where available, like
-   CoMaps, or from its navigation notifications/screen otherwise) and beams
-   them to the Pod once per second.
+   once and the phone is remembered for later rides.
+3. Start navigation in your app. Cruizer reads its turn instructions (from
+   the app's own navigation data where available, like CoMaps, or from its
+   navigation notifications/screen otherwise) and sends them to the Pod
+   about once per second, which also keeps the link's keep-alive heartbeat
+   fed.
 
-The app keeps the link alive with the same keep-alive heartbeat the official
-app uses, so the Pod never drops it mid-ride. Nothing leaves your phone:
-no cloud, no account, no tracking.
+Nothing leaves your phone: no cloud, no account, no tracking.
 
 ## Supported navigation apps
 
 | App | How Cruizer reads turns |
 |---|---|
-| CoMaps | Structured data (best — exact maneuvers, exits, distances) |
-| OsmAnd / Organic Maps / Google Maps / Waze | Navigation notifications, plus Google Maps' on-screen text |
+| CoMaps | Structured provider data (exact maneuvers, exits, distances) |
+| OsmAnd / Organic Maps / Google Maps / Waze | Navigation notifications |
 
-Google Maps only updates its notification about once a minute, so Cruizer can
-additionally read Maps' screen directly (you'll be asked to enable that in
-Android's accessibility settings; the app shows a banner when it's worth it).
+Google Maps updates its notification only about once a minute, so Cruizer
+can additionally read Maps' screen directly (optional, enabled in Android's
+accessibility settings; the app shows a banner when it applies).
 
 ## Requirements
 
@@ -65,7 +66,7 @@ Android's accessibility settings; the app shows a banner when it's worth it).
 - A Royal Enfield Tripper Pod (Meteor 350 etc.). The newer Tripper Dash
   cluster (Hunter 350 etc.) is a different device and is **not** supported
   yet.
-- Optional: location permission for the ride distance/speed and the auto
+- Optional: location permission for the ride distance/speed and the day/
   night mode.
 
 ## Installing
@@ -80,26 +81,22 @@ yourself:
 First launch walks you through the permissions (Bluetooth, notifications).
 Then press **Connect**, turn the ignition on, and ride.
 
-## Credits, AI notice, warranty
+## Credits
 
-- The Bluetooth protocol was figured out independently from the hardware and
-  cross-checked against the notes of
-  [wazetripper](https://github.com/jnsdias/wazetripper) — see
-  [NOTICE.md](NOTICE.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
-- **This code was written with substantial assistance from AI tools
-  (LLM-based coding agents) and reviewed by a human.** Treat it accordingly:
-  read what it does, not just what it claims.
-- **No warranty, no liability.** This software is provided "as is", without
-  warranty of any kind. It talks to a display on your motorcycle's
-  instrument cluster — never interact with your phone while riding, and
-  verify the Pod's behaviour while parked before trusting it in traffic.
-  The authors are not liable for anything that happens to you, your bike,
-  or your Pod while using this app. Use it at your own risk.
+The Bluetooth protocol was worked out from the hardware, cross-checked
+against [wazetripper](https://github.com/jnsdias/wazetripper)'s notes; the
+Maps icon matcher is adapted from
+[Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge). Full
+details in [NOTICE.md](NOTICE.md).
 
 ## License
 
 Cruizer is free software: licensed under the
 **GNU General Public License v3 or later** ([LICENSE](LICENSE)). You may
 use, study, change and redistribute it; derivative works must stay free
-under the same terms. Third-party credits are listed in
-[NOTICE.md](NOTICE.md).
+under the same terms.
+
+**No warranty, no liability.** The software is provided "as is", without
+warranty of any kind. Never interact with your phone while riding; the
+authors are not liable for anything that happens to you, your bike, or
+your Pod while using this app. Use it at your own risk.
