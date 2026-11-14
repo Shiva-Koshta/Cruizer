@@ -95,3 +95,11 @@ Then press **Connect**, turn the ignition on, and ride.
   verify the Pod's behaviour while parked before trusting it in traffic.
   The authors are not liable for anything that happens to you, your bike,
   or your Pod while using this app. Use it at your own risk.
+
+## License
+
+Cruizer is free software: licensed under the
+**GNU General Public License v3 or later** ([LICENSE](LICENSE)). You may
+use, study, change and redistribute it; derivative works must stay free
+under the same terms. Third-party credits are listed in
+[NOTICE.md](NOTICE.md).

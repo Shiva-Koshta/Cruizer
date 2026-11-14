@@ -10,5 +10,10 @@ code, assets, or binaries are included or redistributed.
   pattern and the `0x32` roundabout exit icon index offset. All frame factories,
   dynamic CRC algorithms, state engines, and Compose UI were independently
   written from scratch.
+- **Gadgetbridge** (`Freeyourgadget/Gadgetbridge`, GPLv3) — the Google Maps
+  largeIcon arrow matcher (`GoogleMapsIconMatcher`) is adapted from
+  Gadgetbridge's icon-matching approach; the CoMaps navigation provider
+  contract follows Gadgetbridge's `CoMapsNavigationReceiver`. This is why
+  Cruizer is licensed GPL-3.0-or-later.
 
 Author: neo (<site.casiopea.cruizer>)
