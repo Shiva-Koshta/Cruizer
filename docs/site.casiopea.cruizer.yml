@@ -9,13 +9,14 @@ Changelog: https://github.com/nxs-neo/Cruizer/releases
 RepoType: git
 Repo: https://github.com/nxs-neo/Cruizer
 AutoUpdateMode: Version
+Binaries: https://github.com/nxs-neo/Cruizer/releases/download/v%v/cruizer-%v.apk
 UpdateCheckMode: Tags
-CurrentVersion: 0.5.18
-CurrentVersionCode: 47
+CurrentVersion: 1.0.0
+CurrentVersionCode: 48
 
 Builds:
-  - versionCode: 47
-    versionName: 0.5.18
-    commit: ae2a13a5560d7ec087a64d6ee1e8f691e00a4a37
+  - versionCode: 48
+    versionName: 1.0.0
+    commit: b0368231a5f9d09ed1c46764cfd6e954720da7f3
     gradle:
       - yes
