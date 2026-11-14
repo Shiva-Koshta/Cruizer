@@ -6,17 +6,24 @@ AuthorEmail: john_ninan@tuta.io
 SourceCode: https://github.com/nxs-neo/Cruizer
 IssueTracker: https://github.com/nxs-neo/Cruizer/issues
 Changelog: https://github.com/nxs-neo/Cruizer/releases
+
+AutoName: Cruizer
+
 RepoType: git
 Repo: https://github.com/nxs-neo/Cruizer
-AutoUpdateMode: Version
 Binaries: https://github.com/nxs-neo/Cruizer/releases/download/v%v/cruizer-%v.apk
+
+Builds:
+  - versionName: 1.0.0
+    versionCode: 48
+    commit: b0368231a5f9d09ed1c46764cfd6e954720da7f3
+    subdir: app
+    gradle:
+      - yes
+
+AllowedAPKSigningKeys: c3ffe0bce5298a6bf13ef7d6511327d98c4a6e02c300c30d00f20fdade452203
+
+AutoUpdateMode: Version
 UpdateCheckMode: Tags
 CurrentVersion: 1.0.0
 CurrentVersionCode: 48
-
-Builds:
-  - versionCode: 48
-    versionName: 1.0.0
-    commit: b0368231a5f9d09ed1c46764cfd6e954720da7f3
-    gradle:
-      - yes
