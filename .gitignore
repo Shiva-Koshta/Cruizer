@@ -8,6 +8,7 @@ analysis/jadx.log
 
 # build junk
 app/build/
+/build/
 .gradle/
 local.properties
 .idea/

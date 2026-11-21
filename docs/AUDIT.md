@@ -72,6 +72,19 @@ current pass.
 - Day angle corrected (`dayOfYear - 1`), equation of time added, polar cases
   covered by tests.
 
+### Build tooling (supply chain)
+- Gradle 9.6.0 → 9.9.2: fixes GHSA-3cfg-jpcr-gfp3 (critical) and the
+  daemon/repository advisories up to 9.9.1. The committed wrapper jar matched
+  no official checksum; it was regenerated from the verified 9.9.2
+  distribution and `distributionSha256Sum` is now pinned.
+- AGP 9.5.x (incl. 9.5.2) pulls vulnerable build-time libs. The root
+  `buildscript` classpath forces the `build-tool-pins` bundle:
+  Bouncy Castle 1.85 (CVE-2026-8763 critical, CVE-2026-13506), Guava
+  33.7.2-jre, jose4j 0.9.6, JDOM2 2.0.6.1. Drop the pins once AGP ships them.
+  APK runtime and test classpaths had no OSV findings.
+- Left (moderate, build-time only): commons-lang3 3.16.0, Kotlin Gradle
+  plugin build-cache deserialization (no build cache configured).
+
 ## Deliberately not changed
 
 - **Google Maps largeIcon template (#30)** — two `MERGE_RIGHT` templates
