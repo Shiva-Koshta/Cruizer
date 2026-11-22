@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Debug build installs next to the upstream app (applicationIdSuffix .debug); tell the launchers apart. -->
+    <string name="app_name" translatable="false">Cruizer Dev</string>
+</resources>

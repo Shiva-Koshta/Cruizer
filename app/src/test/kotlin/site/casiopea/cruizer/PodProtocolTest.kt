@@ -192,4 +192,38 @@ class PodProtocolTest {
         assertEquals("1.2 km", PodProtocol.bottomLabel(PodProtocol.Bottom.Total(1234, false), now))
         assertNull(PodProtocol.bottomLabel(PodProtocol.Bottom.None, now))
     }
+
+    @Test
+    fun `lab hex parser pads to 18 bytes`() {
+        val p = PodProtocol.parsePayloadHex("10 11 15")!!
+        assertEquals(18, p.size)
+        assertEquals(listOf(0x10, 0x11, 0x15), p.take(3).map { it.toInt() and 0xFF })
+        assertTrue(p.drop(3).all { it == 0.toByte() })
+        assertEquals(PodProtocol.hex(p), PodProtocol.hex(PodProtocol.parsePayloadHex("101115")!!))
+    }
+
+    @Test
+    fun `lab hex parser rejects bad input`() {
+        assertNull(PodProtocol.parsePayloadHex("1"))
+        assertNull(PodProtocol.parsePayloadHex("zz"))
+        assertNull(PodProtocol.parsePayloadHex(""))
+        assertNull(PodProtocol.parsePayloadHex("00".repeat(19)))
+    }
+
+    @Test
+    fun `serial query frame CRC`() {
+        assertEquals(0x428B, crcOf(PodProtocol.withCrc(PodProtocol.parsePayloadHex("30")!!)))
+    }
+
+    @Test
+    fun `sweep payload varies only the icon`() {
+        val p = PodProtocol.sweepPayload(0x2A)
+        assertEquals(0x2A, p[2].toInt())
+        assertEquals(0x41, p[10].toInt())
+    }
+
+    @Test
+    fun `every lab preset parses`() {
+        site.casiopea.cruizer.ui.LAB_PRESETS.forEach { assertTrue(it.id, PodProtocol.parsePayloadHex(it.hex) != null) }
+    }
 }

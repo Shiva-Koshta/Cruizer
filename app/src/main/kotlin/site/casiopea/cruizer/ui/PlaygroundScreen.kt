@@ -20,9 +20,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,9 +32,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import site.casiopea.cruizer.NavRoute
 import site.casiopea.cruizer.Session
+import site.casiopea.cruizer.ble.LinkState
 import site.casiopea.cruizer.proto.PodProtocol
 import site.casiopea.cruizer.proto.TurnKind
 import site.casiopea.cruizer.proto.TurnUpdate
@@ -126,7 +131,7 @@ fun PlaygroundScreen(onBack: () -> Unit) {
             Column(Modifier.padding(16.dp)) {
                 Text("Frame (hex, [0..19]):", style = MaterialTheme.typography.labelSmall)
                 Text(
-                    frame.joinToString(" ") { "%02X".format(it) },
+                    PodProtocol.hex(frame),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -138,6 +143,111 @@ fun PlaygroundScreen(onBack: () -> Unit) {
             }) { Text("Send to Pod") }
             OutlinedButton(onClick = { NavRoute.postTurn(null) }) { Text("Clear") }
             TextButton(onClick = onBack) { Text("Back") }
+        }
+
+        RawLabCard()
+    }
+}
+
+/**
+ * Raw Frame lab: send any 18-byte payload (CRC added), hold it past the 5 s watchdog,
+ * pick bench presets (issues/01, issues/02), sweep icons and read what the Pod writes back.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RawLabCard() {
+    val clipboard = LocalClipboardManager.current
+    val link by Session.linkState.collectAsState()
+    val held by Session.labHold.collectAsState()
+    val replies by Session.podReplies.collectAsState()
+    var hexText by remember { mutableStateOf("") }
+    var group by remember { mutableStateOf(LAB_PRESETS.first().group) }
+    var preset by remember { mutableStateOf<LabPreset?>(null) }
+    var sweep by remember { mutableIntStateOf(0x00) }
+    val payload = PodProtocol.parsePayloadHex(hexText)
+    val connected = link == LinkState.CONNECTED
+    // Leaving the Playground must hand the Pod back to normal frames.
+    DisposableEffect(Unit) { onDispose { Session.labHold.value = null } }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Raw lab", style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (connected) "Pod connected" else "Pod not connected: connect first",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+            OutlinedTextField(
+                value = hexText,
+                onValueChange = { hexText = it; preset = null },
+                label = { Text("Payload hex (max 18 bytes, CRC auto)") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                payload?.let { PodProtocol.hex(PodProtocol.withCrc(it)) } ?: "invalid hex",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (payload == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
+            preset?.let { Text("${it.id}: expect ${it.expect}", style = MaterialTheme.typography.bodySmall) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(enabled = payload != null && connected, onClick = { Session.labHold.value = payload }) { Text("Hold") }
+                OutlinedButton(enabled = payload != null && connected, onClick = {
+                    payload?.let { Session.labOnce.tryEmit(it) }
+                }) { Text("Send once") }
+                OutlinedButton(enabled = held != null, onClick = { Session.labHold.value = null }) { Text("Release") }
+            }
+            Text(
+                held?.let { "Holding: ${PodProtocol.hex(it)}" } ?: "Not holding (normal frames)",
+                style = MaterialTheme.typography.labelSmall,
+            )
+
+            Text("Presets", style = MaterialTheme.typography.titleSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LAB_PRESETS.map { it.group }.distinct().forEach { g ->
+                    FilterChip(selected = group == g, onClick = { group = g }, label = { Text(g) })
+                }
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LAB_PRESETS.filter { it.group == group }.forEach { p ->
+                    FilterChip(
+                        selected = preset == p,
+                        enabled = connected,
+                        onClick = {
+                            preset = p
+                            hexText = p.hex
+                            val bytes = PodProtocol.parsePayloadHex(p.hex) ?: return@FilterChip
+                            if (p.hold) Session.labHold.value = bytes else Session.labOnce.tryEmit(bytes)
+                        },
+                        label = { Text(p.id) },
+                    )
+                }
+            }
+
+            Text("Icon sweep (held)", style = MaterialTheme.typography.titleSmall)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                listOf(-1, 1).forEach { step ->
+                    if (step == 1) Text("0x%02X".format(sweep), style = MaterialTheme.typography.titleMedium)
+                    OutlinedButton(enabled = connected, onClick = {
+                        sweep = (sweep + step) and 0xFF
+                        Session.labHold.value = PodProtocol.sweepPayload(sweep)
+                    }) { Text(if (step < 0) "◀" else "▶") }
+                }
+            }
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Text("Pod replies", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = { clipboard.setText(AnnotatedString(replies.joinToString("\n"))) }) { Text("Copy") }
+                TextButton(onClick = { Session.podReplies.value = emptyList() }) { Text("Clear") }
+            }
+            if (replies.isEmpty()) Text("none yet", style = MaterialTheme.typography.bodySmall)
+            replies.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }

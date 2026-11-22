@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import site.casiopea.cruizer.ble.LinkState
+import site.casiopea.cruizer.proto.PodProtocol
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -321,6 +322,21 @@ object Session {
 
     /** UI -> service channel for the 6-digit PIN the user typed (manual DI). */
     val pinInput = MutableSharedFlow<String>(extraBufferCapacity = 4)
+
+    /** Debug lab: 18-byte payload re-sent by PodService every tick instead of normal frames. */
+    val labHold = MutableStateFlow<ByteArray?>(null)
+
+    /** Debug lab: one-shot payloads (e.g. SET_TIME, PING_FW, serial query). */
+    val labOnce = MutableSharedFlow<ByteArray>(extraBufferCapacity = 8)
+
+    /** Debug lab: raw Pod -> phone writes, newest first. */
+    val podReplies = MutableStateFlow<List<String>>(emptyList())
+
+    fun logPodReply(bytes: ByteArray) {
+        if (!site.casiopea.cruizer.BuildConfig.DEBUG) return
+        val t = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+        podReplies.value = (listOf("$t  ${PodProtocol.hex(bytes)}") + podReplies.value).take(Constants.LAB_REPLY_LINES)
+    }
 
     private val _phoneCall = MutableStateFlow(PhoneCall.NONE)
     val phoneCall: StateFlow<PhoneCall> = _phoneCall

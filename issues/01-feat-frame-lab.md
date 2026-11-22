@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Priority | P0 (tooling for 02 and every protocol fix) |
+| Priority | P0 (tooling for 02 and every protocol fix; **runs the colour test that gates owner priority #2**) |
 | Depends on | 00 |
 | Bench test | enables B1–B13 |
 | Build type | debug only (Playground is already gated by `BuildConfig.DEBUG`) |
@@ -14,6 +14,11 @@ The existing Frame Playground (`ui/PlaygroundScreen.kt`) can only post a `TurnUp
 conflicts (intensity, byte 10, icon families, 12 h time …) we must send **arbitrary bytes**, keep
 them on screen past the 5 s watchdog, and see what the Pod writes back.
 
+**First job: the colour test.** Near a turn Cruizer already sends the same `[6] = 0x40` as Super Pod, yet the
+owner's Pod stays black and white with Cruizer and turns red with the RE app and Super Pod. So a byte other than `[6]`
+decides whether colour shows. The existing Playground can't find out which: every frame goes through Cruizer's
+encoder (`[10] = F1/11`, next distance in `[8-9]`, ETA bottom line). The Raw lab can, by changing one byte at a time.
+
 ## What to build
 
 ```
@@ -22,7 +27,7 @@ Playground
  └─ NEW "Raw lab" card
      ├─ hex field (up to 18 bytes, CRC added automatically, short input zero-padded)
      ├─ [Hold] re-send every tick (watchdog)   [Send once]   [Release]
-     ├─ Preset dropdown (bench tests B1–B13, see issue 02)
+     ├─ Preset dropdown: "Colour test" group first (C1–C9, below), then bench tests B1–B13 (issue 02)
      ├─ Icon sweep: [◀] 0x2A [▶]  builds a nav template with that icon, auto-Hold
      └─ Pod replies: last 30 lines "HH:mm:ss.SSS  30 52 45 …"  [Copy] [Clear]
 ```
@@ -90,6 +95,35 @@ data class LabPreset(val id: String, val label: String, val hex: String, val hol
 val LAB_PRESETS: List<LabPreset> = listOf(/* copy the table from issue 02, one entry per row */)
 ```
 
+### 4b. Colour test presets (first group in `LAB_PRESETS`, all `hold = true`)
+
+Right turn `0x15`, day. Each preset changes **one thing** compared with C1 (the Super Pod style frame).
+Hold each for ~5 s, photograph the Pod, note what it shows.
+
+| ID | Changes vs C1 | Hex (18-byte payload, CRC added by the lab) | Expect if `[10]` is the colour switch |
+|---|---|---|---|
+| C1 | baseline, Super Pod style, 20 m | `10 11 15 00 14 01 40 FF FF FF 41 FF FF FF` | **red** arrow |
+| C2 | `[10] = F1` (Cruizer, no next turn) | `10 11 15 00 14 01 40 FF FF FF F1 FF FF FF` | black and white |
+| C3 | `[10] = 11` (Cruizer, next in metres) | `10 11 15 00 14 01 40 FF FF FF 11 FF FF FF` | black and white |
+| C4 | `[7-9]` = next straight `09` at 200 m (`00 C8`) | `10 11 15 00 14 01 40 09 00 C8 41 FF FF FF` | red (isolates `[8-9]`) |
+| C5 | full Cruizer frame: C3 + C4 + ETA 14:30 bottom | `10 11 15 00 14 01 40 09 00 C8 11 0E 1E 00` | black and white (what you see today) |
+| C6 | bottom line = ETA 14:30 (`[13] = 00`) only | `10 11 15 00 14 01 40 FF FF FF 41 0E 1E 00` | red (isolates the bottom line) |
+| C7 | `[10] = 31` ("highway" in Super's code) | `10 11 15 00 14 01 40 FF FF FF 31 FF FF FF` | ? (curiosity) |
+| C8 | 10 m, `[6] = 50` | `10 11 15 00 0A 01 50 FF FF FF 41 FF FF FF` | **yellow** arrow |
+| C9 | 60 m, `[6] = 20` | `10 11 15 00 3C 01 20 FF FF FF 41 FF FF FF` | partial red shaft |
+
+Read the result:
+
+| Photos show | Meaning | Next |
+|---|---|---|
+| C1 red, C2/C3 B&W, C4/C6 red | `[10]` is the colour switch | Build **08** (`[10] = 0x41`), then **07** |
+| C1 red, C4 B&W | the next-distance bytes `[8-9]` block it | Build **08** (`[8-9] = FF FF`), then 07 |
+| C1 red, C6 B&W | the ETA bottom line blocks it | New issue: send ETA the Super Pod way, or `FF FF FF` |
+| C1 B&W too | colour needs something these frames don't have | Compare with what Super Pod sends (its notes in Quicker-pod); stop and re-plan |
+| C8 yellow, C9 partial red | the `[6]` ladder works on our Meteor Pod | **07** as written |
+
+Write the photos and the result table into `docs/BENCH_RESULTS.md` (issue 02, section B0).
+
 ### 5. UI (`ui/PlaygroundScreen.kt`)
 
 - New `RawLabCard()` composable below the existing preview card (keep the file's FilterChip/Card style).
@@ -124,6 +158,7 @@ object Constants {
 ## Acceptance criteria
 
 - [ ] Holding `10 11 41 00 00 00 00 FF 00 00 00 FF FF FF 10` keeps the compass "N" on the Pod for > 30 s (no watchdog drop).
+- [ ] Colour test C1–C9 run, photos taken, result row picked and written to `docs/BENCH_RESULTS.md`.
 - [ ] Release → normal behaviour resumes (clock or nav) within ~5 s.
 - [ ] Leaving the Playground releases the hold.
 - [ ] Pairing/resume shows Pod replies in the log (at least the `20 01` PIN-accept or `03 …` after PING_FW).

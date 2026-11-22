@@ -43,8 +43,8 @@ android {
         applicationId = "site.casiopea.cruizer"
         minSdk = 30
         targetSdk = 37
-        versionCode = 51
-        versionName = "1.0.3"
+        versionCode = 52
+        versionName = "1.0.4"
     }
 
     testOptions {
@@ -78,7 +78,10 @@ android {
     }
 
     buildTypes {
-        debug { }
+        debug {
+            // Installs next to the release/upstream app (different signing key, same base ID).
+            applicationIdSuffix = ".debug"
+        }
 
         release {
             isMinifyEnabled = true

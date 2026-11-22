@@ -42,6 +42,20 @@ object PodProtocol {
         return out
     }
 
+    fun hex(b: ByteArray): String = b.joinToString(" ") { "%02X".format(it) }
+
+    /** "10 11 15" / "101115" -> 18-byte payload, zero-padded; null if invalid or > 18 bytes. */
+    fun parsePayloadHex(s: String): ByteArray? {
+        val clean = s.filterNot(Char::isWhitespace)
+        if (clean.isEmpty() || clean.length % 2 != 0 || clean.length > 36) return null
+        val bytes = clean.chunked(2).map { it.toIntOrNull(16) ?: return null }
+        return ByteArray(18).also { out -> bytes.forEachIndexed { i, v -> out[i] = v.toByte() } }
+    }
+
+    /** Known-good nav template (wazetripper layout) with only the icon varied: 50 m, day, no next, blank bottom. */
+    fun sweepPayload(icon: Int): ByteArray =
+        parsePayloadHex("10 11 %02X 00 32 01 00 FF FF FF 41 FF FF FF".format(icon and 0xFF))!!
+
     private fun frame(body: (ByteArray) -> Unit): ByteArray {
         val p = ByteArray(18)
         body(p)

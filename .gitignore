@@ -10,6 +10,7 @@ analysis/jadx.log
 app/build/
 /build/
 .gradle/
+.kotlin/
 local.properties
 .idea/
 android-sdk/

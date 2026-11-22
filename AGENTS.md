@@ -12,6 +12,8 @@ BLE with turn-by-turn data parsed from nav apps. One rider, one phone.
 ```
 
 - No system Android SDK: it lives in `./android-sdk/` (gitignored). `local.properties` is gitignored too.
+  adb is `./android-sdk/platform-tools/adb`. Java: `export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`.
+- Debug builds use `applicationIdSuffix = ".debug"` (label "Cruizer Dev") so they install next to upstream Cruizer.
 - APK output: `app/build/outputs/apk/release/app-release.apk` (debug-signed) or `app/build/outputs/apk/debug/app-debug.apk`.
 - All tests are pure JVM (JUnit 4) under `app/src/test` — parsers and protocol only. Hardware/BLE has no tests.
 
@@ -53,7 +55,8 @@ BLE with turn-by-turn data parsed from nav apps. One rider, one phone.
 - User's phone is reachable over adb (`adb devices` — the port/serial changes). Installing
   resets the notification-listener grant; re-add via
   `settings put secure enabled_notification_listeners` appending
-  `:site.casiopea.cruizer/site.casiopea.cruizer.notify.TurnSource`.
+  `:site.casiopea.cruizer/site.casiopea.cruizer.notify.TurnSource` (debug: `site.casiopea.cruizer.debug/…`), or
+  `adb shell cmd notification allow_listener site.casiopea.cruizer.debug/site.casiopea.cruizer.notify.TurnSource`.
 - GrapheneOS auto-kills Bluetooth: `PodLink` watches adapter state and re-opens the GATT
   server on STATE_ON; a stale remembered MAC re-scans after 3 failed direct connects.
 - The Tripper Pod only advertises ~30 s after ignition-on.

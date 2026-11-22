@@ -96,6 +96,7 @@ class PodService : Service() {
         site.casiopea.cruizer.notify.TurnSource.rebind(this) // ask OS to bind the listener if enabled
         // UI PIN submissions -> Pod (PIN typed on the connection dialog).
         scope.launch { Session.pinInput.collect { link.send(PodProtocol.pinFrame(it)) } }
+        scope.launch { Session.labOnce.collect { link.send(PodProtocol.withCrc(it)) } }
         tickJob = scope.launch {
             // The Pod only advertises for ~30 s after ignition-on, so reconnect
             // attempts keep pacing in the background.
@@ -283,6 +284,7 @@ class PodService : Service() {
 
     /** Commands from the Pod; only the PIN handshake reply matters to Cruiser. */
     private fun onPodCommand(cmd: ByteArray) {
+        Session.logPodReply(cmd)
         if (cmd.size < 2) return
         if (cmd[0] == 0x20.toByte()) {
             if (cmd[1] == 1.toByte()) {
@@ -352,6 +354,12 @@ class PodService : Service() {
     private fun tick() {
         val night = currentNight()
         val now = System.currentTimeMillis()
+        // Debug Frame lab: a held raw payload replaces every normal frame (and feeds the watchdog).
+        Session.labHold.value?.let {
+            link.send(PodProtocol.withCrc(it))
+            lastFrameSentAt = now
+            return
+        }
         if (Session.phoneCall.value != Session.PhoneCall.NONE) {
             // Call overlay is also the watchdog feed while the call lasts (RE behavior).
             link.send(PodProtocol.callFrame())
@@ -463,7 +471,7 @@ class PodService : Service() {
         link.send(f)
         Session.podScreen.value =
             PodProtocol.podScreen(maneuver, distance, s.imperial, bottom, night, now)
-        if (BuildConfig.DEBUG) Log.i("CruizerNav", "nav frame: " + f.joinToString(" ") { "%02X".format(it) })
+        if (BuildConfig.DEBUG) Log.i("CruizerNav", "nav frame: " + PodProtocol.hex(f))
         lastFrameSentAt = now
     }
 
