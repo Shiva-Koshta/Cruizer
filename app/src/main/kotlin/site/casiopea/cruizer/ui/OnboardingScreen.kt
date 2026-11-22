@@ -42,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import site.casiopea.cruizer.Perms
+import site.casiopea.cruizer.Perms.granted
 
 /**
  * First-run and permission recovery screen.
@@ -56,9 +58,8 @@ fun OnboardingScreen(
     @Suppress("UNUSED_EXPRESSION")
     MainActivity.gate.collectAsState().value // reading the gate makes resume re-check permissions
 
-    val btPerms = context.has(Manifest.permission.BLUETOOTH_CONNECT) &&
-        context.has(Manifest.permission.BLUETOOTH_SCAN)
-    val notif = context.has(Manifest.permission.POST_NOTIFICATIONS)
+    val btPerms = context.granted(Perms.ble())
+    val notif = context.granted(Perms.notifications())
     val location = context.has(Manifest.permission.ACCESS_FINE_LOCATION)
     val listener = listenerGranted(context)
     val phone = context.has(Manifest.permission.READ_PHONE_STATE)
@@ -71,8 +72,8 @@ fun OnboardingScreen(
     }
 
     val comapsPerms = site.casiopea.cruizer.notify.ComapsSource.permissions(context)
-    // Location stays optional: BLE is neverForLocation and turn data comes from
-    // notifications/provider. Location only enriches the trip + AUTO night mode.
+    // Location stays optional on Android 12+: BLE is neverForLocation and turn data
+    // comes from notifications/provider. Android 11 BLE scans need it (Perms.ble).
     val allRequiredGranted = context.hasRequiredPermissions()
     val mapsInstalled = runCatching {
         context.packageManager.getPackageInfo("com.google.android.apps.maps", 0)
@@ -107,18 +108,13 @@ fun OnboardingScreen(
         PermissionCard(
             emoji = "📡",
             title = "Nearby devices (Bluetooth)",
-            description = "Required to scan, connect, and stream navigation frames to your Tripper Pod — and to show its status notification.",
+            description = "Required to scan, connect, and stream navigation frames to your Tripper Pod — and to show its status notification." +
+                if (Perms.locationScan()) " On Android 11 this is the Location permission, and Location must stay on." else "",
             ready = btPerms && notif,
             required = true,
             actionLabel = "Grant Permission",
         ) {
-            permLauncher.launch(
-                arrayOf(
-                    Manifest.permission.BLUETOOTH_CONNECT,
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.POST_NOTIFICATIONS,
-                ),
-            )
+            permLauncher.launch(Perms.required().toTypedArray())
         }
 
         // 2. Location - Optional

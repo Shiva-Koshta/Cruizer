@@ -31,6 +31,6 @@ Nothing leaves your phone: no cloud, no account, no tracking.
 
 <b>Requirements</b>
 
-• An Android 12+ phone with Bluetooth
+• An Android 11+ phone with Bluetooth
 • A Royal Enfield Tripper Pod (Meteor 350 etc.). The newer Tripper Dash cluster (Hunter 350 etc.) is a different device and is not supported yet.
 • Optional: location permission for the ride distance/speed and the day/night mode

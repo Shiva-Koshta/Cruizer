@@ -1,0 +1,1 @@
+Android 11 support. Fixes setup getting stuck on Android 12.

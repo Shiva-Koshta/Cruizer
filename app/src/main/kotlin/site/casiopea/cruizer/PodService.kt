@@ -14,11 +14,14 @@ import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Build
 import android.os.IBinder
+import android.telephony.PhoneStateListener
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import site.casiopea.cruizer.Perms.granted
 import site.casiopea.cruizer.ble.LinkState
 import site.casiopea.cruizer.ble.PodLink
 import site.casiopea.cruizer.notify.ComapsSource
@@ -61,7 +64,7 @@ class PodService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var link: PodLink
     private var tickJob: Job? = null
-    private var telephonyCallback: TelephonyCallback? = null
+    private var phoneUnregister: (() -> Unit)? = null
     private var lastFrameSentAt = 0L
     private var lastManeuver: Int? = null
     private var lastDistanceM: Int? = null
@@ -81,7 +84,7 @@ class PodService : Service() {
         link = PodLink(this)
         link.watchAdapterState() // BT off/on cycles (GrapheneOS) kill the GATT server — track it
         // The GATT server only needs CONNECT (SCAN is for discovering new Pods).
-        if (hasPerm(Manifest.permission.BLUETOOTH_CONNECT)) link.openServer()
+        if (granted(Perms.connect())) link.openServer()
         link.onCommand = ::onPodCommand
         observe()
         restorePairedAddress()
@@ -146,9 +149,7 @@ class PodService : Service() {
     }
 
     /** Preconditions for any BLE call — checked, never assumed. */
-    private fun bleReady(): Boolean =
-        hasPerm(Manifest.permission.BLUETOOTH_CONNECT) &&
-            hasPerm(Manifest.permission.BLUETOOTH_SCAN)
+    private fun bleReady(): Boolean = granted(Perms.ble())
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // startAsForeground can fail (permission revoked mid-start) and stopSelf()
@@ -547,41 +548,50 @@ class PodService : Service() {
 
     private fun registerPhoneState() {
         if (!hasPerm(Manifest.permission.READ_PHONE_STATE)) {
-            telephonyCallback = null
+            phoneUnregister = null
             Session.postCall(Session.PhoneCall.NONE)
             return
         }
         val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return
-        val cb = object : TelephonyCallback(), TelephonyCallback.CallStateListener {
-            override fun onCallStateChanged(state: Int) {
-                Session.postCall(
-                    when (state) {
-                        TelephonyManager.CALL_STATE_RINGING -> Session.PhoneCall.INCOMING
-                        TelephonyManager.CALL_STATE_OFFHOOK -> Session.PhoneCall.ACTIVE
-                        else -> Session.PhoneCall.NONE
-                    }
-                )
-            }
-        }
-        telephonyCallback = cb
         try {
-            tm.registerTelephonyCallback(mainExecutor, cb)
+            phoneUnregister = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val cb = object : TelephonyCallback(), TelephonyCallback.CallStateListener {
+                    override fun onCallStateChanged(state: Int) = postCallState(state)
+                }
+                tm.registerTelephonyCallback(mainExecutor, cb)
+                ({ tm.unregisterTelephonyCallback(cb) })
+            } else {
+                // Android 11: TelephonyCallback doesn't exist yet.
+                @Suppress("DEPRECATION")
+                val l = object : PhoneStateListener() {
+                    @Deprecated("Android 11 fallback")
+                    override fun onCallStateChanged(state: Int, number: String?) = postCallState(state)
+                }
+                @Suppress("DEPRECATION")
+                tm.listen(l, PhoneStateListener.LISTEN_CALL_STATE)
+                @Suppress("DEPRECATION")
+                ({ tm.listen(l, PhoneStateListener.LISTEN_NONE) })
+            }
         } catch (_: SecurityException) {
-            telephonyCallback = null
+            phoneUnregister = null
             Session.postCall(Session.PhoneCall.NONE)
         } catch (_: Exception) {
-            telephonyCallback = null
+            phoneUnregister = null
         }
     }
 
-    private fun unregisterPhoneState() {
-        val cb = telephonyCallback ?: return
-        telephonyCallback = null
-        val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return
-        try {
-            tm.unregisterTelephonyCallback(cb)
-        } catch (_: Exception) {
+    private fun postCallState(state: Int) = Session.postCall(
+        when (state) {
+            TelephonyManager.CALL_STATE_RINGING -> Session.PhoneCall.INCOMING
+            TelephonyManager.CALL_STATE_OFFHOOK -> Session.PhoneCall.ACTIVE
+            else -> Session.PhoneCall.NONE
         }
+    )
+
+    private fun unregisterPhoneState() {
+        val unregister = phoneUnregister ?: return
+        phoneUnregister = null
+        runCatching(unregister)
     }
 
     private fun hasPerm(p: String): Boolean =
@@ -637,7 +647,7 @@ class PodService : Service() {
             .build()
         // A trip needs the location type, but only while the permission is held:
         // startForeground throws without it on Android 14+.
-        val withConnectedDevice = hasPerm(Manifest.permission.BLUETOOTH_CONNECT)
+        val withConnectedDevice = granted(Perms.connect())
         val withLocation = hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)
         if (!withConnectedDevice) {
             stopSelf()

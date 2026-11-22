@@ -41,10 +41,10 @@ android {
 
     defaultConfig {
         applicationId = "site.casiopea.cruizer"
-        minSdk = 31
+        minSdk = 30
         targetSdk = 37
-        versionCode = 50
-        versionName = "1.0.2"
+        versionCode = 51
+        versionName = "1.0.3"
     }
 
     testOptions {

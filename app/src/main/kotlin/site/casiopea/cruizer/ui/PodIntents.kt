@@ -1,24 +1,20 @@
 package site.casiopea.cruizer.ui
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import site.casiopea.cruizer.Perms
+import site.casiopea.cruizer.Perms.granted
 import site.casiopea.cruizer.PodService
 import site.casiopea.cruizer.Session
 import site.casiopea.cruizer.ble.LinkState
 
-// Location stays out: it is optional everywhere else, so gating Connect on it
-// made the button silently dead for riders who denied it. Notifications stay in:
-// without them the foreground-service notification is invisible on Android 13+.
+// Location stays out on Android 12+: it is optional there, so gating Connect on it
+// made the button silently dead for riders who denied it (Android 11 needs it to scan).
+// Notifications stay in: without them the foreground-service notification is
+// invisible on Android 13+.
 internal fun Context.hasRequiredPermissions(): Boolean =
-    checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
-        android.content.pm.PackageManager.PERMISSION_GRANTED &&
-        checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) ==
-        android.content.pm.PackageManager.PERMISSION_GRANTED &&
-        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
-        android.content.pm.PackageManager.PERMISSION_GRANTED &&
-        listenerGranted(this)
+    granted(Perms.required()) && listenerGranted(this)
 
 internal fun Context.podStart(mac: String? = null) {
     if (!hasRequiredPermissions()) {

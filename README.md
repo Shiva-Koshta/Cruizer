@@ -62,7 +62,7 @@ accessibility settings; the app shows a banner when it applies).
 
 ## Requirements
 
-- An Android 12+ phone with Bluetooth.
+- An Android 11+ phone with Bluetooth (Android 11 needs Location on to find the Pod).
 - A Royal Enfield Tripper Pod (Meteor 350 etc.). The newer Tripper Dash
   cluster (Hunter 350 etc.) is a different device and is **not** supported
   yet.

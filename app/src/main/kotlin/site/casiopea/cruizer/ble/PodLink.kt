@@ -1,6 +1,6 @@
 package site.casiopea.cruizer.ble
 
-import android.Manifest
+import site.casiopea.cruizer.Perms
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -20,7 +20,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
+import site.casiopea.cruizer.Perms.granted
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -222,9 +222,7 @@ class PodLink(private val context: Context) {
 
     fun openServer() {
         if (server != null) return
-        if (context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) !=
-            PackageManager.PERMISSION_GRANTED
-        ) return
+        if (!context.granted(Perms.connect())) return
         try {
             server = mgr.openGattServer(context, serverCallback)?.apply {
                 val svc =
